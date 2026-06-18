@@ -1,5 +1,5 @@
 ---
-## name: generate-click2sync-rows
+name: generate-click2sync-rows
 description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use when user says "genera mi C2C", "C2C report", "reporte semanal", "genera el reporte", "click2sync".
 ---
 
@@ -8,50 +8,17 @@ description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use w
 ## Instructions
 
 ### Step 1: Config
+If `config.json` does not exist in this skill folder, ask the user:
+- `person_tag`: Their personal QA tag (format: FirstnameLastname-QA)
+- `person_tag_fbid`: The FBID of that tag
 
-Si no existe `config.json`, preguntar al usuario:
+Save to `config.json` in this skill folder.
 
-- `person_tag`: Su tag personal de QA (formato: NombreApellido-QA)
-- `person_tag_fbid`: El FBID de ese tag
-
-Guardar en `config.json` en esta misma carpeta.
-
-### Step 2: Leer Tasks
-
+### Step 2: Run
 ```bash
-python scripts/read-tasks.py
+python scripts/read_tasks.py | python scripts/validate.py
 ```
 
-Genera `output/tasks-raw.json`.
+## Output rules
 
-### Step 3: Validar
-
-```bash
-python scripts/validate-tasks.py
-```
-
-Genera `output/validation-report.md`.
-
-**Si hay errores → mostrar el reporte y NO avanzar.**
-
-## Examples
-
-Example 1: Ejecución normal
-User says: "genera mi C2C"
-Actions:
-
-1. Verifica config.json existe
-2. Ejecuta `python scripts/read-tasks.py`
-3. Ejecuta `python scripts/validate-tasks.py`
-4. Muestra validation-report.md al usuario
-Result: Si todo OK → listo. Si errores → usuario corrige tasks.
-
-## Troubleshooting
-
-Error: "config.json not found"
-Cause: Primera ejecución
-Solution: Preguntar person_tag y person_tag_fbid, crear config.json
-
-Error: "0 tasks found"
-Cause: No hay tasks de esta semana con esos tags
-Solution: Verificar que existan tasks creadas entre lunes y domingo con tag SOFTTEK-PQX-QA + tag personal
+After running the command, show ONLY its stdout. Do NOT add anything after it. No summary, no bullet points, no extra explanation. Your response is ONLY the script output. Zero additional words.

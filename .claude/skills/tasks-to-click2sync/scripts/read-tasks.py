@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Step 2: Lee tasks de la semana actual y genera output/tasks-raw.json"""
+"""Read tasks from the current week. Prints JSON to stdout for piping to validate.py."""
 
 import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
-OUTPUT_DIR = os.path.join(SKILL_DIR, "output")
-OUTPUT_PATH = os.path.join(OUTPUT_DIR, "tasks-raw.json")
 
 TEAM_TAG = {"title": "SOFTTEK-PQX-QA", "fbid": "1512046989630466"}
 EXCLUDE_TAGS = [
@@ -24,16 +23,15 @@ EXCLUDE_TAGS = [
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        raise FileNotFoundError(f"config.json not found at {CONFIG_PATH}")
+        print("Error: config.json not found.", file=sys.stderr)
+        sys.exit(1)
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
 
 def get_week_timestamps():
     today = datetime.now()
-    monday = (today - timedelta(days=today.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    monday = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     sunday = monday + timedelta(days=6, hours=23, minutes=59, seconds=59)
     return int(monday.timestamp()), int(sunday.timestamp())
 
@@ -55,7 +53,7 @@ def build_url(ts_start, ts_end, config):
 
 
 def parse_title(title):
-    match = re.match(r"^STK_\[([^\]]+)\]_\[([^\]]+)\]_([^:]+):\s*(.+)$", title)
+    match = re.match(r'^STK_\[([^\]]+)\]_\[([^\]]+)\]_([^:]+):\s*(.+)$', title)
     if not match:
         return {"module": "", "team": "", "category": "", "shortDescription": title}
     return {
@@ -68,13 +66,13 @@ def parse_title(title):
 
 def parse_description_keys(description):
     keys = {}
-    for match in re.finditer(r"\[([^\]]+)\]\s*:\s*([^\[]*)", description):
+    for match in re.finditer(r'\[([^\]]+)\]\s*:\s*([^\[]*)', description):
         key = match.group(1).strip()
         if key == key.upper():
             continue
         raw = match.group(2)
-        non_ascii = re.search(r"[^\x00-\x7F]", raw)
-        value = (raw[: non_ascii.start()] if non_ascii else raw).strip().strip("*").strip()
+        non_ascii = re.search(r'[^\x00-\x7F]', raw)
+        value = (raw[:non_ascii.start()] if non_ascii else raw).strip().strip("*").strip()
         if value:
             keys[key] = value
     return keys
@@ -93,20 +91,24 @@ def main():
     )
 
     if result.returncode != 0:
-        print(f"❌ Error: {result.stderr}")
+        print(f"Error querying tasks: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    # Filter out non-JSON lines (OAuth warnings, etc.)
+    stdout_lines = result.stdout.strip().split('\n')
+    json_start = next((i for i, line in enumerate(stdout_lines) if line.strip().startswith('[')), None)
+    if json_start is None:
+        print("Error: No JSON output from meta CLI.", file=sys.stderr)
+        sys.exit(1)
+
+    json_str = '\n'.join(stdout_lines[json_start:])
+    tasks_raw = json.loads(json_str)
+
+    if not tasks_raw:
+        print("[]")
         return
 
-    # `meta` puede imprimir warnings (p.ej. de auth) en stdout antes del JSON.
-    # Extraemos el array JSON desde el primer '[' hasta el último ']'.
-    stdout = result.stdout
-    start = stdout.find("[")
-    end = stdout.rfind("]")
-    if start == -1 or end == -1:
-        print(f"❌ No se encontró JSON en la salida de `meta`:\n{stdout[:500]}")
-        return
-    tasks_raw = json.loads(stdout[start : end + 1])
     output = []
-
     for task in tasks_raw:
         title_parsed = parse_title(task.get("title", ""))
         desc_keys = parse_description_keys(task.get("description", ""))
@@ -124,11 +126,8 @@ def main():
             "owner": task.get("owner", ""),
         })
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(OUTPUT_PATH, "w") as f:
-        json.dump(output, f, indent=2)
-
-    print(f"✅ {len(output)} tasks guardadas en output/tasks-raw.json")
+    # Print JSON to stdout for validate.py to consume
+    print(json.dumps(output))
 
 
 if __name__ == "__main__":
