@@ -1,0 +1,58 @@
+[
+  {
+    "id": "T276247966",
+    "module": "Privacy",
+    "team": "Commitments",
+    "category": "Peer Review",
+    "shortDescription": "Review test cases for Login flow",
+    "status": "NO_PROGRESS",
+    "descriptionKeys": {
+      "Effort": "4",
+      "Products": "1",
+      "Action": "NA"
+    },
+    "tags": [
+      "created_by_softtek",
+      "RaulG-PrivacyQA",
+      "SOFTTEK-PQX-QA"
+    ],
+    "owner": "galindoraul"
+  },
+  {
+    "id": "T276243052",
+    "module": "Privacy",
+    "team": "Commitments",
+    "category": "Roadmap",
+    "shortDescription": "Q3 Test Strategy Planning",
+    "status": "NO_PROGRESS",
+    "descriptionKeys": {
+      "Effort": "6",
+      "Products": "1"
+    },
+    "tags": [
+      "created_by_softtek",
+      "RaulG-PrivacyQA",
+      "SOFTTEK-PQX-QA"
+    ],
+    "owner": "galindoraul"
+  },
+  {
+    "id": "T276239634",
+    "module": "Privacy",
+    "team": "Commitments",
+    "category": "Test request after closure",
+    "shortDescription": "Validate edge case scenario",
+    "status": "NO_PROGRESS",
+    "descriptionKeys": {
+      "Effort": "4",
+      "Products": "1",
+      "Action": "pep"
+    },
+    "tags": [
+      "created_by_softtek",
+      "RaulG-PrivacyQA",
+      "SOFTTEK-PQX-QA"
+    ],
+    "owner": "galindoraul"
+  }
+]

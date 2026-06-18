@@ -1,0 +1,8 @@
+{
+  "files.exclude": {
+    ".claude/skills/monthly-billing-report": true,
+    ".claude/skills/weekly-hours-report": true,
+    ".claude/skills/tasks-to-click2sync": false,
+    ".claude/skills/tasks-creation": true,
+  }
+}
