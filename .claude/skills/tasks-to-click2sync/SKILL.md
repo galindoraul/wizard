@@ -5,20 +5,44 @@ description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use w
 
 # Generate Click2Sync Rows
 
+## IMPORTANT
+ALWAYS use `/usr/bin/python3` to run scripts. NEVER use `python` or `python3` without the full path.
+
 ## Instructions
 
 ### Step 1: Config
-If `config.json` does not exist in this skill folder, ask the user:
-- `person_tag`: Their personal QA tag (format: FirstnameLastname-QA)
-- `person_tag_fbid`: The FBID of that tag
+If `config.json` does not exist, ask the user and save:
+```json
+{
+  "person_tag": "FirstnameLastname-QA",
+  "person_tag_fbid": "1234567890123456",
+  "softtek_pto_name": "Firstname Lastname",
+  "softtek_username": "flastname",
+  "meta_username": "lastnamefirstname"
+}
+```
 
-Save to `config.json` in this skill folder.
-
-### Step 2: Run
+### Step 2: Read and Validate
 ```bash
-python scripts/read_tasks.py | python scripts/validate.py
+/usr/bin/python3 scripts/read-tasks.py | /usr/bin/python3 scripts/validate-tasks.py
+```
+If errors, stop. Show output only.
+
+### Step 3: Write Report (only if Step 2 passes with 0 errors)
+```bash
+/usr/bin/python3 scripts/read-tasks.py | /usr/bin/python3 scripts/row-builder.py | /usr/bin/python3 scripts/sheets-writer.py
 ```
 
 ## Output rules
 
-After running the command, show ONLY its stdout. Do NOT add anything after it. No summary, no bullet points, no extra explanation. Your response is ONLY the script output. Zero additional words.
+Show ONLY script stdout. Do NOT add anything after it.
+
+## Error: Auth expired
+
+If any script fails with "OAuth" or "401" or "auth" errors, tell the user:
+
+1. Go to https://www.internalfb.com/intern/jf/authenticate/
+2. Find "Legacy Options" section
+3. Copy the UID and NONCE values
+4. Run: `jf auth --skip-legacy-auth-upgrade <UID> <NONCE>`
+5. Then re-run the skill

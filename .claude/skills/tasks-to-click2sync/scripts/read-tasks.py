@@ -80,8 +80,10 @@ def parse_description_keys(description):
 
 def main():
     config = load_config()
-    ts_start, ts_end = get_week_timestamps()
-    url = build_url(ts_start, ts_end, config)
+    url = os.environ.get("TASKS_FBURL")
+    if not url:
+        ts_start, ts_end = get_week_timestamps()
+        url = build_url(ts_start, ts_end, config)
 
     result = subprocess.run(
         ["meta", "tasks.task", "list", f"--fburl={url}",
