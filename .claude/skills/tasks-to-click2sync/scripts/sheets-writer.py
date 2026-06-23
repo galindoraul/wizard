@@ -152,6 +152,13 @@ def write_row(ws, row_idx, row_data):
             cell.font = Font(size=9, color="71717a")
 
 
+def set_column_widths(ws):
+    """Set column widths based on header label length + 4 (2 padding each side)."""
+    for col_idx, (key, label, _) in enumerate(COLUMNS, 1):
+        col_letter = ws.cell(row=1, column=col_idx).column_letter
+        ws.column_dimensions[col_letter].width = len(label) + 4
+
+
 def main():
     if not os.path.exists(CONFIG_PATH):
         print("Error: config.json not found.", file=sys.stderr)
@@ -209,6 +216,9 @@ def main():
     start_row = ws.max_row + 1
     for i, row_data in enumerate(new_rows):
         write_row(ws, start_row + i, row_data)
+
+    # Set column widths
+    set_column_widths(ws)
 
     wb.save(str(xlsx_path))
     print(f"{len(new_rows)} rows written to '{tab_name}' in Click2SyncReport.xlsx")

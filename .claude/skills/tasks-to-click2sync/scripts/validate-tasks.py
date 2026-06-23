@@ -101,7 +101,7 @@ def validate_task(task):
 
     mapping = CATEGORY_MAP.get(category)
     if not mapping:
-        errors.append(("Type/Subtype", f'Category \"{category}\" not recognized', "Valid category", "Check title follows STK_[Mod]_[Team]_Category: Desc"))
+        errors.append(("Type/Subtype", f'Category "{category}" not recognized', "Valid category", "Check title follows STK_[Mod]_[Team]_Category: Desc"))
         return errors, warnings
 
     req_type, req_subtype = mapping
@@ -124,26 +124,21 @@ def validate_task(task):
     is_design_with_peer = is_design and req_subtype in PEER_REVIEW_SUBTYPES
     net_effort = effort - peer_effort if is_design_with_peer and peer_effort else effort
 
-    # Action validation
     if valid_actions and action not in valid_actions:
-        errors.append(("Action", f'\"{action}\"', ", ".join(valid_actions), ""))
+        errors.append(("Action", f'"{action}"', ", ".join(valid_actions), ""))
 
-    # Effort validation
     if effort <= 0:
         errors.append(("Effort", "Empty or 0", "Numeric value > 0", ""))
 
-    # Products validation
     if not is_execution and products <= 0:
         errors.append(("Products", "Empty or 0", "Numeric value > 0", ""))
 
-    # Peer Review validation
     if is_design_with_peer and effort > 0:
         if peer_effort <= 0:
             errors.append(("Peer Review Min 10%", "No Peer Review Effort", f">= {effort * 0.1:.1f} (10% of {int(effort)})", TIPS["Peer Review Min 10%"]))
         elif peer_effort < effort * 0.1:
             errors.append(("Peer Review Min 10%", f"Peer Review: {int(peer_effort)}", f">= {effort * 0.1:.1f} (10% of {int(effort)})", TIPS["Peer Review Min 10%"]))
 
-    # Execution fields
     if is_execution:
         missing = []
         if "TC Pass" not in dk:
@@ -155,17 +150,14 @@ def validate_task(task):
         if missing:
             errors.append(("Execution Fields", f"Missing: {', '.join(missing)}", "Numeric values", TIPS["Execution Fields"]))
 
-    # Sum validation
     if is_execution and "TC Pass" in dk:
         expected = tc_pass + tc_fail + tc_blocked
         if total != expected:
             errors.append(("Sum O+P+Q", f"Total ({int(total)}) != {int(tc_pass)}+{int(tc_fail)}+{int(tc_blocked)}", f"Total = {int(expected)}", ""))
 
-    # Bugs validation
     if tc_fail > 0 and qty_new_bugs <= 0 and qty_bugs_closed <= 0:
         errors.append(("Bugs", f"Fail={int(tc_fail)} with no bugs reported", "At least 1 bug", TIPS["Bugs"]))
 
-    # Productivity warnings
     if req_subtype == "Test Case Execution" and total > 0:
         ratio = net_effort / total
         if ratio > 1:
@@ -192,24 +184,18 @@ def validate_task(task):
 
 def validate_against_calendar(tasks, week_context):
     """Validate tasks against PTO calendar context (Layer 2).
-
-    Validates:
-    - SUM of scheduledEffort == expectedHours (workingDays * 8)
-    - SUM of actualEffort == expectedHours
-
-    Returns list of (task_id, rule, issue, expected, tip) tuples.
+    Returns (calendar_errors, breakdown).
     """
-    calendar_errors = []
-
     working_days = week_context["working_days"]
     expected_hours = week_context["expected_hours"]
 
-    total_scheduled_effort = 0
-    total_actual_effort = 0
+    breakdown = []
+    total_effort = 0
 
     for task in tasks:
         dk = task.get("descriptionKeys", {})
         category = task.get("category", "")
+        task_id = task.get("id", "?")
 
         mapping = CATEGORY_MAP.get(category)
         if not mapping:
@@ -222,33 +208,26 @@ def validate_against_calendar(tasks, week_context):
         peer_effort = safe_num(dk.get("Peer Review Scheduled Effort")) if is_design_with_peer else 0
         net_effort = effort - peer_effort if is_design_with_peer and peer_effort else effort
 
-        total_scheduled_effort += net_effort
-        total_actual_effort += net_effort
+        total_effort += net_effort
+        label = f"{category}: {task.get('shortDescription', '')}"
+        breakdown.append((task_id, label, int(net_effort)))
 
-    # Effort sum validation
-    if total_scheduled_effort != expected_hours and total_scheduled_effort > 0:
+    calendar_errors = []
+    if total_effort != expected_hours and total_effort > 0:
+        diff = expected_hours - total_effort
+        tip = f"Missing {int(diff)}hrs" if diff > 0 else f"Exceeds by {int(abs(diff))}hrs"
         calendar_errors.append((
-            "ALL",
-            "Scheduled Effort (Sum)",
-            f"Sum is {int(total_scheduled_effort)}hrs",
-            f"{expected_hours}hrs ({working_days} days \u00d7 8)",
-            "Adjust task efforts so total equals expected hours"
+            "Effort (Sum)",
+            f"Sum is {int(total_effort)}hrs",
+            f"{expected_hours}hrs ({working_days} days x 8)",
+            tip
         ))
 
-    if total_actual_effort != expected_hours and total_actual_effort > 0:
-        calendar_errors.append((
-            "ALL",
-            "Actual Effort (Sum)",
-            f"Sum is {int(total_actual_effort)}hrs",
-            f"{expected_hours}hrs ({working_days} days \u00d7 8)",
-            "Adjust task efforts so total equals expected hours"
-        ))
-
-    return calendar_errors
+    return calendar_errors, breakdown
 
 
 # =============================================================================
-# OUTPUT FORMATTING
+# OUTPUT
 # =============================================================================
 
 def print_table(rows, headers):
@@ -256,16 +235,13 @@ def print_table(rows, headers):
     for row in rows:
         for i, cell in enumerate(row):
             col_widths[i] = max(col_widths[i], len(str(cell)))
-
     separator = "+-" + "-+-".join("-" * w for w in col_widths) + "-+"
     header_line = "| " + " | ".join(h.ljust(w) for h, w in zip(headers, col_widths)) + " |"
-
     print(separator)
     print(header_line)
     print(separator)
     for row in rows:
-        line = "| " + " | ".join(str(cell).ljust(w) for cell, w in zip(row, col_widths)) + " |"
-        print(line)
+        print("| " + " | ".join(str(cell).ljust(w) for cell, w in zip(row, col_widths)) + " |")
     print(separator)
 
 
@@ -282,7 +258,6 @@ def main():
     sunday = monday + timedelta(days=6)
     week_str = f"{monday.strftime('%b %d')} - {sunday.strftime('%b %d, %Y')}"
 
-    # Load PTO context for Layer 2
     config = {}
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
@@ -292,7 +267,7 @@ def main():
     if config.get("softtek_pto_name"):
         week_context = pto_reader.get_week_context(config["softtek_pto_name"])
 
-    # Layer 1: Per-row validation
+    # Layer 1
     error_tasks = []
     warning_tasks = []
     ok_count = 0
@@ -310,10 +285,11 @@ def main():
         if not task_errors and not task_warnings:
             ok_count += 1
 
-    # Layer 2: Cross-row calendar validation
+    # Layer 2
     calendar_errors = []
+    breakdown = []
     if week_context:
-        calendar_errors = validate_against_calendar(tasks, week_context)
+        calendar_errors, breakdown = validate_against_calendar(tasks, week_context)
 
     # Output
     print("")
@@ -335,7 +311,8 @@ def main():
         print("  ERRORS (per task)")
         print("-" * 60)
         for task_id, url, label, issues in error_tasks:
-            print(f"\n  {task_id} \u2014 {label}")
+            print(f"")
+            print(f"  {task_id} \u2014 {label}")
             print(f"  {url}")
             print("")
             rows = [(rule, issue, expected, tip) for rule, issue, expected, tip in issues]
@@ -345,15 +322,23 @@ def main():
         print("")
         print("  ERRORS (calendar / effort)")
         print("-" * 60)
-        rows = [(rule, issue, expected, tip) for _, rule, issue, expected, tip in calendar_errors]
-        print_table(rows, ["Rule", "Issue", "Expected", "How to fix"])
+        for rule, issue, expected, tip in calendar_errors:
+            print(f"  {rule}: {issue}, expected {expected}. {tip}")
+        print("")
+        print("  Breakdown:")
+        for task_id, label, effort in breakdown:
+            print(f"    {task_id} - {label:<45} -> {effort}hrs")
+        total = sum(e for _, _, e in breakdown)
+        print(f"    {'':.<45}    -----")
+        print(f"    {'Total':<45}    {total}hrs")
 
     if warning_tasks:
         print("")
         print("  WARNINGS")
         print("-" * 60)
         for task_id, url, label, issues in warning_tasks:
-            print(f"\n  {task_id} \u2014 {label}")
+            print(f"")
+            print(f"  {task_id} \u2014 {label}")
             print(f"  {url}")
             print("")
             rows = [(rule, issue, expected, tip) for rule, issue, expected, tip in issues]

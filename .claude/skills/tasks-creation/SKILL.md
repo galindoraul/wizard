@@ -1,45 +1,116 @@
 ---
 name: create-tasks
-description: Creates tasks in MetaMate's internal tasks tool from per-type templates. Uses fixed config (user-tag, team, subteam) and only asks for type and quantity. Shows the newly created tasks when done.
+description: Creates tasks from per-type templates. Uses saved config (team, subteam, user_tag, unixname) — asks only on first use. Supports batch creation of mixed types. Use when user wants to create tasks, batch tasks, QA tasks, or says 'create task', 'crear tarea', 'nueva tarea'.
 ---
 
 # create-tasks
 
-Creates one or more tasks of the same type in MetaMate's `tasks` tool.
+Creates one or more tasks using per-type templates. Supports single or mixed-type batch creation.
 
-## Fixed data (config.json)
+## Config (config.json)
 
-These are NOT asked on every run. They live in `config.json`:
+Stored once per user. Never asked again after first setup.
 
-- `user_tag` -> added as the task tag
-- `team` -> goes in the title
-- `subteam` -> goes in the title
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `team` | App name in title | Privacy |
+| `subteam` | Feature name in title | Commitments |
+| `user_tag` | Dynamic tag per user | privacy_commitments_qa |
+| `unixname` | Meta username (before @) | galindoraul |
 
-If any field in `config.json` is empty, ask the user ONCE, write it to `config.json`, and never ask again.
+If any field is missing on first use, ask ALL four at once, save, and never ask again.
+
+## How to create tasks (Meta CLI)
+
+**IMPORTANT:** Always use this exact command. Do NOT run `--help`, discovery commands, or any other task tool.
+
+```bash
+meta tasks.task create \
+  --title='<title>' \
+  --description='<description>' \
+  --add-tag='<user_tag>' \
+  --owner=<unixname>
+```
+
+**Key details:**
+- `--owner=<unixname>` — From config. This is the Meta username (email prefix).
+- `--add-tag` — One flag per tag. Always `{user_tag}` (from config).
+- `--title` — The filled template title with user's short description appended.
+- `--description` — The template description fields (empty, for user to fill later).
+- **Do NOT run `--help` or any discovery commands.** This command is complete and ready to use.
 
 ## Templates
 
-Each task type is a file in `assets/<type>.md` with three sections:
+Each type lives in `assets/<type>.md` with this structure:
 
-- `## Title` -> title format. Contains `{team}` and `{subteam}`.
-- `## Tags` -> contains `{user_tag}`.
-- `## Description` -> fixed content for the type (defined by the user in the template).
+```
+# Type: <Requirement Type>
+# Subtype: <Requirement Subtype>
 
-The placeholders `{team}`, `{subteam}`, `{user_tag}` are replaced with the values from `config.json`.
+## When to use
+<short description shown in menu to help users pick>
 
-The task fields are always the same per type. The user fills in the rest after the task is created; the skill only creates the base structure.
+## Title
+STK_[{team}]_[{subteam}]_<Category>:
+
+## Description
+<fields to fill, left empty>
+
+## Tags
+{user_tag}
+```
+
+Placeholders `{team}`, `{subteam}`, `{user_tag}` are replaced from config.
 
 ## Flow
 
-1. Read `config.json`. If any data is missing, ask for it once and save it.
-2. List the available types (file names in `assets/`) and ask the user to choose one.
-3. Ask how many tasks of that type to create (default 1).
-4. Show a simple summary of what was requested: task type and quantity. Ask for explicit confirmation before creating. Do not show how the task will look.
-5. After the OK, create the N tasks with MetaMate's `tasks` tool (same title, tag, and description for all).
-6. Filter and show the user only the tasks created in this run.
+### Quick mode (advanced users)
+If the user says something like `"create 2 test_execution and 1 reporting"`, skip the menu and go directly to step 4.
+
+### Guided mode (default)
+
+1. **Config check** — Read config.json. If missing data, ask ALL four fields at once and save.
+
+2. **Show menu** — List available types with their "When to use" description:
+   ```
+   1. test_execution — Executing test cases and reporting pass/fail/blocked.
+   2. reporting — Documenting Test Execution reports (pass/fail/defects).
+   3. bugs_followup — Following up on an existing bug. SLA: 7 days.
+   ...
+   ```
+   User picks one or more types.
+
+3. **Ask quantity** — For each type selected, ask how many (default 1).
+
+4. **Ask short description** — Present these options clearly:
+   ```
+   How do you want to provide the task titles?
+   A) All at once — give me all titles separated by commas
+   B) One by one — I'll ask you for each title individually
+   C) Skip — leave titles blank (you can edit them later)
+   ```
+   The short description is appended after the colon in the title.
+   Example: `STK_[Privacy]_[Commitments]_Test Execution: Sprint 12 regression`
+
+5. **Confirm** — Show summary:
+   ```
+   Creating:
+   - 2x Test Execution: "Sprint 12 regression", "Login flow"
+   - 1x Reporting: "Weekly summary"
+   OK?
+   ```
+
+6. **Create** — After OK, run `meta tasks.task create` for each task. No discovery, no help commands.
+
+7. **Show results** — Display only the tasks created in this run with links.
 
 ## Rules
 
-- Never ask for user_tag, team, or subteam if they are already in config.json.
+- Never ask for team/subteam/user_tag/unixname if already in config.
 - Always confirm before creating.
-- Do not invent fields that are not in the template.
+- Do not invent fields not in the template.
+- Tags always include {user_tag} (from config).
+- Show "When to use" descriptions in the menu so users pick the right type easily.
+- Support creating multiple types in a single request.
+- **Always use `meta tasks.task create` with the exact syntax above.** Never run --help or discovery commands.
+- **Always set --owner** to the unixname from config.
