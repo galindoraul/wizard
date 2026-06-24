@@ -1,15 +1,15 @@
 {
   "files.exclude": {
-    "skills/monthly-billing-report": true,
-    "skills/tasks-creation": true,
-    "skills/tasks-to-click2sync": false,
-    "skills/weekly-hours-report": true,
+    ".claude/skills/monthly-billing-report": true,
+    ".claude/skills/tasks-creation": true,
+    ".claude/skills/tasks-to-click2sync": false,
+    ".claude/skills/weekly-hours-report": true,
   },
 
   "search.exclude": {
-    "skills/monthly-billing-report": true,
-    "skills/tasks-creation": true,
-    "skills/tasks-to-click2sync": false,
-    "skills/weekly-hours-report": true,
+    ".claude/skills/monthly-billing-report": true,
+    ".claude/skills/tasks-creation": true,
+    ".claude/skills/tasks-to-click2sync": false,
+    ".claude/skills/weekly-hours-report": true,
   },
 }
