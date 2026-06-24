@@ -1,0 +1,20 @@
+{
+  "plugins": [
+    {
+      "name": "wizard",
+      "description": "Skills estándar para el equipo Softtek",
+      "source": {
+        "type": "path",
+        "path": "./plugins/wizard"
+      }
+    },
+    {
+      "name": "wizard-vip",
+      "description": "Skills avanzados para el equipo VIP",
+      "source": {
+        "type": "path",
+        "path": "./plugins/wizard-vip"
+      }
+    }
+  ]
+}

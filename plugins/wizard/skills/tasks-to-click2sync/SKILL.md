@@ -1,6 +1,6 @@
 ---
 name: task-to-click2sync
-description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use when user says "genera mi C2C", "C2C report", "reporte semanal", "genera el reporte", "click2sync".
+description: Reads QA tasks from Meta's task system, validates them against Click2Sync rules and writes them to Google Sheets as weekly tabs. Use when user says 'genera mi C2C', 'C2C report', 'valida mis tareas', 'validate tasks'.
 ---
 
 # Generate Click2Sync Rows

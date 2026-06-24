@@ -1,0 +1,9 @@
+{
+  "name": "wizard",
+  "version": "1.0.0",
+  "description": "Wizard plugin for management of internal proccesses",
+  "author": {
+    "name": "Raul Galindo",
+    "email": "galindoraul@meta.com"
+  }
+}

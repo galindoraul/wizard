@@ -1,0 +1,9 @@
+{
+  "name": "wizard-vip",
+  "version": "1.0.0",
+  "description": "Wizard VIP plugin for management of internal proccesses",
+  "author": {
+    "name": "Raul Galindo",
+    "email": "galindoraul@meta.com"
+  }
+}
