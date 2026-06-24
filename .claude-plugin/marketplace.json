@@ -1,4 +1,9 @@
 {
+  "name": "wizard",
+  "owner": {
+    "name": "Raul Galindo",
+    "url": "https://github.com/galindoraul"
+  },
   "plugins": [
     {
       "name": "wizard",
