@@ -1,11 +1,15 @@
 {
   "files.exclude": {
-    "plugins/wizard": false,
-    "pligins/wizard-vip": false,
+    "skills/monthly-billing-report": true,
+    "skills/tasks-creation": true,
+    "skills/tasks-to-click2sync": false,
+    "skills/weekly-hours-report": true,
   },
 
   "search.exclude": {
-    "plugins/wizard": false,
-    "pligins/wizard-vip": false,
+    "skills/monthly-billing-report": true,
+    "skills/tasks-creation": true,
+    "skills/tasks-to-click2sync": false,
+    "skills/weekly-hours-report": true,
   },
 }
