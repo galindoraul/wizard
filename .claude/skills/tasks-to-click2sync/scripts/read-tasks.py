@@ -18,6 +18,12 @@ EXCLUDE_TAGS = [
     {"title": "permission requests", "fbid": "630189192353771"},
     {"title": "permission-request", "fbid": "1141017623024532"},
     {"title": "Device Inventory", "fbid": "772502848173513"},
+    {"title": "QA-TestRequest", "fbid": "820959891576025"},
+    {"title": "QA-testplan", "fbid": "1641304926087302"},
+    {"title": "PQX-Automation-Audit", "fbid": "200033036281922"},
+    {"title": "PQX-TestCase-Audit", "fbid": "784864703348981"},
+    {"title": "bug", "fbid": "483076488425894"},
+    {"title": "Bugs", "fbid": "12706673982"},
 ]
 
 
@@ -53,13 +59,14 @@ def build_url(ts_start, ts_end, config):
 
 
 def parse_title(title):
-    match = re.match(r'^STK_\[([^\]]+)\]_\[([^\]]+)\]_([^:]+):\s*(.+)$', title)
+    """Parse title format: [STK]_[Product]_[Team]_[Activity]: Description"""
+    match = re.match(r'^\[STK\]_\[([^\]]+)\]_\[([^\]]+)\]_\[([^\]]+)\]:\s*(.+)$', title)
     if not match:
-        return {"module": "", "team": "", "category": "", "shortDescription": title}
+        return {"module": "", "team": "", "activity": "", "shortDescription": title}
     return {
         "module": match.group(1).strip(),
         "team": match.group(2).strip(),
-        "category": match.group(3).strip(),
+        "activity": match.group(3).strip(),
         "shortDescription": match.group(4).strip(),
     }
 
@@ -126,11 +133,14 @@ def main():
         desc_keys = parse_description_keys(task.get("description", ""))
         tags = [t.strip() for t in task.get("tags", "").split(",") if t.strip()]
 
+        # Category (Type) comes from [Type] in description
+        category = desc_keys.get("Type", "")
+
         output.append({
             "id": task["number"],
             "module": title_parsed["module"],
             "team": title_parsed["team"],
-            "category": title_parsed["category"],
+            "category": category,
             "shortDescription": title_parsed["shortDescription"],
             "status": task.get("progress", ""),
             "descriptionKeys": desc_keys,

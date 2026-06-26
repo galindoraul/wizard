@@ -12,29 +12,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 pto_reader = import_module("pto-reader")
 
-CATEGORY_MAP = {
-    "Roadmap": ("Test Planning", "Test Strategy"),
-    "Test request after closure": ("Test Analysis", "Business Requirements"),
-    "Peer Review": ("Test Analysis", "Business Requirements"),
-    "AIP Review": ("Test Analysis", "Business Requirements"),
-    "Documentation creation": ("Test Analysis", "Knowledge Transfer"),
-    "Documentation Update": ("Test Analysis", "Knowledge Transfer"),
-    "Test Creation": ("Test Design", "Test Case"),
-    "Data Request": ("Test Design", "Test Data"),
-    "Data preparation": ("Test Design", "Test Data"),
-    "Tool": ("Test Implementation", "Set Up & Configure Test Environment"),
-    "Access Request": ("Test Implementation", "Set Up & Configure Test Environment"),
-    "Test Execution": ("Test Execution & Reporting", "Test Case Execution"),
-    "SEV followup": ("Test Execution & Reporting", "Defect Verification"),
-    "Bugs followup": ("Test Execution & Reporting", "Defect Verification"),
-    "SEV creation": ("Test Execution & Reporting", "Log in Defect"),
-    "Reporting": ("Test Execution & Reporting", "Test Summary Report"),
-    "Metrics review": ("Project Tracking Activities", "Management"),
-    "Support Activities": ("Project Tracking Activities", "Management"),
-    "KT": ("Project Tracking Activities", "Training"),
-    "Onboarding": ("Project Tracking Activities", "Training"),
+# Maps [Type] value from description → (Requirement Type, Requirement Subtype)
+TYPE_MAP = {
+    "Test Plan": ("Test Planning", "Test Plan"),
+    "Test Strategy": ("Test Planning", "Test Strategy"),
+    "Business Requirements": ("Test Analysis", "Business Requirements"),
+    "Functional Requirements": ("Test Analysis", "Functional Requirements"),
+    "Knowledge Transfer": ("Test Analysis", "Knowledge Transfer"),
+    "Test Case": ("Test Design", "Test Case"),
+    "Test Data": ("Test Design", "Test Data"),
+    "Set Up & Configure Test Environment": ("Test Implementation", "Set Up & Configure Test Environment"),
+    "Test Case Execution": ("Test Execution & Reporting", "Test Case Execution"),
+    "Defect Verification": ("Test Execution & Reporting", "Defect Verification"),
+    "Log in Defect": ("Test Execution & Reporting", "Log in Defect"),
+    "Test Summary Report": ("Test Execution & Reporting", "Test Summary Report"),
+    "Management": ("Project Tracking Activities", "Management"),
     "Training": ("Project Tracking Activities", "Training"),
-    "Clarification": ("Project Tracking Activities", "Training"),
 }
 
 PEER_REVIEW_SUBTYPES = ["Test Case", "Test Script"]
@@ -69,7 +62,7 @@ def build_rows(tasks, config, week_context, start_request_no):
     for task in tasks:
         dk = task.get("descriptionKeys", {})
         category = task.get("category", "")
-        mapping = CATEGORY_MAP.get(category)
+        mapping = TYPE_MAP.get(category)
         if not mapping:
             continue
 

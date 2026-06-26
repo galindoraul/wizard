@@ -1,5 +1,5 @@
 ---
-name: generate-click2sync-rows
+name: tasks-to-click2sync
 description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use when user says "genera mi C2C", "C2C report", "reporte semanal", "genera el reporte", "click2sync".
 ---
 

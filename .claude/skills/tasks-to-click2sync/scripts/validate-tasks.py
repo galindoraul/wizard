@@ -21,29 +21,22 @@ pto_reader = import_module("pto-reader")
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
 
-CATEGORY_MAP = {
-    "Roadmap": ("Test Planning", "Test Strategy"),
-    "Test request after closure": ("Test Analysis", "Business Requirements"),
-    "Peer Review": ("Test Analysis", "Business Requirements"),
-    "AIP Review": ("Test Analysis", "Business Requirements"),
-    "Documentation creation": ("Test Analysis", "Knowledge Transfer"),
-    "Documentation Update": ("Test Analysis", "Knowledge Transfer"),
-    "Test Creation": ("Test Design", "Test Case"),
-    "Data Request": ("Test Design", "Test Data"),
-    "Data preparation": ("Test Design", "Test Data"),
-    "Tool": ("Test Implementation", "Set Up & Configure Test Environment"),
-    "Access Request": ("Test Implementation", "Set Up & Configure Test Environment"),
-    "Test Execution": ("Test Execution & Reporting", "Test Case Execution"),
-    "SEV followup": ("Test Execution & Reporting", "Defect Verification"),
-    "Bugs followup": ("Test Execution & Reporting", "Defect Verification"),
-    "SEV creation": ("Test Execution & Reporting", "Log in Defect"),
-    "Reporting": ("Test Execution & Reporting", "Test Summary Report"),
-    "Metrics review": ("Project Tracking Activities", "Management"),
-    "Support Activities": ("Project Tracking Activities", "Management"),
-    "KT": ("Project Tracking Activities", "Training"),
-    "Onboarding": ("Project Tracking Activities", "Training"),
+# Maps [Type] value from description -> (Requirement Type, Requirement Subtype)
+TYPE_MAP = {
+    "Test Plan": ("Test Planning", "Test Plan"),
+    "Test Strategy": ("Test Planning", "Test Strategy"),
+    "Business Requirements": ("Test Analysis", "Business Requirements"),
+    "Functional Requirements": ("Test Analysis", "Functional Requirements"),
+    "Knowledge Transfer": ("Test Analysis", "Knowledge Transfer"),
+    "Test Case": ("Test Design", "Test Case"),
+    "Test Data": ("Test Design", "Test Data"),
+    "Set Up & Configure Test Environment": ("Test Implementation", "Set Up & Configure Test Environment"),
+    "Test Case Execution": ("Test Execution & Reporting", "Test Case Execution"),
+    "Defect Verification": ("Test Execution & Reporting", "Defect Verification"),
+    "Log in Defect": ("Test Execution & Reporting", "Log in Defect"),
+    "Test Summary Report": ("Test Execution & Reporting", "Test Summary Report"),
+    "Management": ("Project Tracking Activities", "Management"),
     "Training": ("Project Tracking Activities", "Training"),
-    "Clarification": ("Project Tracking Activities", "Training"),
 }
 
 VALID_ACTIONS = {
@@ -102,10 +95,22 @@ def validate_task(task):
     warnings = []
     dk = task.get("descriptionKeys", {})
     category = task.get("category", "")
+    module = task.get("module", "")
+    team = task.get("team", "")
 
-    mapping = CATEGORY_MAP.get(category)
+    # Validate title format
+    if not module or not team:
+        errors.append(("Title Format", "Title does not match [STK]_[Product]_[Team]_[Activity]: format", "[STK]_[Product]_[Team]_[Activity]: Description", "Fix the task title"))
+        return errors, warnings
+
+    # Validate [Type] exists and is recognized
+    if not category:
+        errors.append(("Type", "[Type] missing from description", "Add [Type]: <value>", "Add [Type]: Test Case Execution (or other valid type)"))
+        return errors, warnings
+
+    mapping = TYPE_MAP.get(category)
     if not mapping:
-        errors.append(("Type/Subtype", f'Category "{category}" not recognized', "Valid category", "Check title follows STK_[Mod]_[Team]_Category: Desc"))
+        errors.append(("Type", f'[Type] "{category}" not recognized', "Valid Type value", "Check valid types: Test Case, Test Case Execution, etc."))
         return errors, warnings
 
     req_type, req_subtype = mapping
@@ -187,9 +192,6 @@ def validate_task(task):
 # =============================================================================
 
 def validate_against_calendar(tasks, week_context):
-    """Validate tasks against PTO calendar context (Layer 2).
-    Returns (calendar_errors, breakdown).
-    """
     working_days = week_context["working_days"]
     expected_hours = week_context["expected_hours"]
 
@@ -200,8 +202,12 @@ def validate_against_calendar(tasks, week_context):
         dk = task.get("descriptionKeys", {})
         category = task.get("category", "")
         task_id = task.get("id", "?")
+        module = task.get("module", "")
 
-        mapping = CATEGORY_MAP.get(category)
+        # Skip tasks with invalid title or type (already caught in Layer 1)
+        if not module:
+            continue
+        mapping = TYPE_MAP.get(category)
         if not mapping:
             continue
 
