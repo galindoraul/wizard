@@ -59,7 +59,7 @@ def build_url(ts_start, ts_end, config):
 
 
 def parse_title(title):
-    """Parse title format: [STK]_[Product]_[Team]_[Activity]: Description"""
+    """Parse title format: [STK]_[Product]_[Team]_[Activity]: Description """
     match = re.match(r'^\[STK\]_\[([^\]]+)\]_\[([^\]]+)\]_\[([^\]]+)\]:\s*(.+)$', title)
     if not match:
         return {"module": "", "team": "", "activity": "", "shortDescription": title}
