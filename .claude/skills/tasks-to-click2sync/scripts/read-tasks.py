@@ -24,6 +24,7 @@ EXCLUDE_TAGS = [
     {"title": "PQX-TestCase-Audit", "fbid": "784864703348981"},
     {"title": "bug", "fbid": "483076488425894"},
     {"title": "Bugs", "fbid": "12706673982"},
+    {"title": "need clarification", "fbid": "1978360869066800"},
 ]
 
 
