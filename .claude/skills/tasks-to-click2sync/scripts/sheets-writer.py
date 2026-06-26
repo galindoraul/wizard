@@ -108,9 +108,15 @@ def get_week_tab_name():
     return f"{monday.strftime('%b')} {monday.day}-{sunday.day}"
 
 
-def get_xlsx_path(config):
-    meta_username = config["meta_username"]
-    base = Path.home() / "Library" / "CloudStorage" / f"GoogleDrive-{meta_username}@meta.com"
+def get_xlsx_path():
+    """Auto-detect Google Drive mount and return path to Click2SyncReport.xlsx."""
+    cloud_storage = Path.home() / "Library" / "CloudStorage"
+    gdrive_dirs = list(cloud_storage.glob("GoogleDrive-*@meta.com"))
+    if not gdrive_dirs:
+        print("Error: Google Drive not found in ~/Library/CloudStorage/", file=sys.stderr)
+        print("Make sure Google Drive for Desktop is installed and syncing.", file=sys.stderr)
+        sys.exit(1)
+    base = gdrive_dirs[0]
     return base / "Shared drives" / "Meta - STK" / "Project Tracking" / "Automation" / "Automation Outputs" / "Click2SyncReport.xlsx"
 
 
@@ -158,7 +164,6 @@ def get_last_request_no(wb, tab_name):
                     return int(str(val).replace("29582-3-", ""))
                 except ValueError:
                     continue
-
     for tab in reversed(wb.sheetnames):
         if tab == tab_name:
             continue
@@ -170,7 +175,6 @@ def get_last_request_no(wb, tab_name):
                     return int(str(val).replace("29582-3-", ""))
                 except ValueError:
                     continue
-
     return 10200
 
 
@@ -211,7 +215,6 @@ def set_column_widths(ws):
 
 
 def row_has_changes(ws, row_idx, row_data):
-    """Check if the new data differs from what's already in the sheet."""
     for col_idx, (key, _, _) in enumerate(COLUMNS, 1):
         if key == "requestNo":
             continue
@@ -235,7 +238,7 @@ def main():
         print("No rows to write.")
         return
 
-    xlsx_path = get_xlsx_path(config)
+    xlsx_path = get_xlsx_path()
     tab_name = get_week_tab_name()
     my_username = config["softtek_username"]
 
@@ -252,9 +255,9 @@ def main():
         if xlsx_path.exists():
             wb = load_workbook(str(xlsx_path))
         else:
-            wb = Workbook()
-            if "Sheet" in wb.sheetnames:
-                del wb["Sheet"]
+            print(f"Error: Click2SyncReport.xlsx not found at: {xlsx_path}", file=sys.stderr)
+            print("Make sure the file exists in the Shared Drive.", file=sys.stderr)
+            sys.exit(1)
 
         if tab_name not in wb.sheetnames:
             ws = wb.create_sheet(tab_name)
@@ -283,7 +286,6 @@ def main():
         for row in rows:
             task_id = extract_task_id(row.get("shortDescription", ""))
             if task_id and task_id in existing_task_rows:
-                # Existing task - only update if data changed
                 target_row_idx = existing_task_rows[task_id]
                 existing_req_no = ws.cell(row=target_row_idx, column=3).value
                 if existing_req_no:
@@ -292,7 +294,6 @@ def main():
                     write_row(ws, target_row_idx, row)
                     updated_count += 1
             else:
-                # New task
                 row["requestNo"] = f"29582-3-{counter:05d}"
                 new_rows.append(row)
                 counter += 1

@@ -18,7 +18,6 @@ If `config.json` does not exist, ask the user and save:
   "person_tag_fbid": "1234567890123456",
   "softtek_pto_name": "Firstname Lastname",
   "softtek_username": "flastname",
-  "meta_username": "lastnamefirstname"
 }
 ```
 
