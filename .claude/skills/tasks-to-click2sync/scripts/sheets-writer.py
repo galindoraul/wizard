@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Writes C2CRow data to Click2SyncReport.xlsx.
-Strategy: copy from Shared Drive to /tmp, modify with openpyxl, cp back.
-Includes retry + verification to handle sync conflicts."""
+"""Writes C2CRow data to a personal Click2Sync Excel file.
+Each person has their own file: Click2Sync/{Name}.xlsx
+Each week is a separate tab. Zero concurrency conflicts."""
 
 import json
 import os
 import re
 import shutil
 import sys
-import time
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,12 +21,6 @@ except ImportError:
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(SKILL_DIR, "config.json")
-
-LOCK_STALE_TIMEOUT = 60
-LOCK_MAX_WAIT = 120
-LOCK_POLL_INTERVAL = 3
-MAX_RETRIES = 3
-RETRY_DELAY = 10
 
 COLUMNS = [
     ("projectId", "Project ID", "default"),
@@ -110,65 +103,21 @@ def get_week_tab_name():
     return f"{monday.strftime('%b')} {monday.day}-{sunday.day}"
 
 
-def get_xlsx_path():
+def get_xlsx_path(config):
+    """Get the personal xlsx path: Click2Sync/{Name}.xlsx"""
     cloud_storage = Path.home() / "Library" / "CloudStorage"
     gdrive_dirs = list(cloud_storage.glob("GoogleDrive-*@meta.com"))
     if not gdrive_dirs:
         print("Error: Google Drive not found in ~/Library/CloudStorage/", file=sys.stderr)
         sys.exit(1)
     base = gdrive_dirs[0]
-    xlsx_path = base / "Shared drives" / "Meta - STK" / "Project Tracking" / "Automation" / "Automation Outputs" / "Click2SyncReport.xlsx"
-    if not xlsx_path.exists():
-        print(f"Error: File not found: {xlsx_path}", file=sys.stderr)
-        sys.exit(1)
-    return xlsx_path
+    c2c_folder = base / "Shared drives" / "Meta - STK" / "Project Tracking" / "Automation" / "Automation Outputs" / "Click2Sync"
 
+    # Create folder if it doesn't exist
+    c2c_folder.mkdir(parents=True, exist_ok=True)
 
-def acquire_lock(lock_path, username):
-    print("Acquiring write lock...", end=" ", flush=True)
-    waited = 0
-    while lock_path.exists():
-        try:
-            lock_content = lock_path.read_text().strip()
-            lock_time = lock_content.split("|")[-1] if "|" in lock_content else ""
-            if lock_time:
-                lock_dt = datetime.fromisoformat(lock_time)
-                age = (datetime.now() - lock_dt).total_seconds()
-                if age > LOCK_STALE_TIMEOUT:
-                    lock_path.unlink(missing_ok=True)
-                    break
-        except (ValueError, OSError):
-            pass
-        if waited >= LOCK_MAX_WAIT:
-            print("TIMEOUT")
-            print("Error: Could not acquire lock. Try again in 2 minutes.", file=sys.stderr)
-            sys.exit(1)
-        time.sleep(LOCK_POLL_INTERVAL)
-        waited += LOCK_POLL_INTERVAL
-
-    lock_path.write_text(f"{username}|{datetime.now().isoformat()}")
-    time.sleep(2)
-    try:
-        content = lock_path.read_text().strip()
-        if not content.startswith(f"{username}|"):
-            print("FAILED")
-            print("Error: Lock taken by another user.", file=sys.stderr)
-            sys.exit(1)
-    except OSError:
-        pass
-    print("OK")
-
-
-def release_lock(lock_path):
-    lock_path.unlink(missing_ok=True)
-
-
-def get_last_data_row(ws):
-    last = 1
-    for row_idx in range(2, ws.max_row + 1):
-        if ws.cell(row=row_idx, column=2).value:
-            last = row_idx
-    return last
+    person_name = config["softtek_pto_name"]
+    return c2c_folder / f"{person_name}.xlsx"
 
 
 def get_last_request_no(wb, tab_name):
@@ -241,35 +190,40 @@ def row_has_changes(ws, row_idx, row_data):
     return False
 
 
-def verify_write(xlsx_path, tab_name, my_username, expected_task_ids):
-    """Re-read the file from Shared Drive and check our rows are there."""
-    try:
-        wb = load_workbook(str(xlsx_path), read_only=True)
-        if tab_name not in wb.sheetnames:
-            wb.close()
-            return False
-        ws = wb[tab_name]
-        found_ids = set()
-        for row_idx in range(2, ws.max_row + 1):
-            owner = ws.cell(row=row_idx, column=2).value
-            desc = ws.cell(row=row_idx, column=6).value
-            if owner and str(owner) == my_username and desc:
-                task_id = extract_task_id(desc)
-                if task_id:
-                    found_ids.add(task_id)
-        wb.close()
-        return expected_task_ids.issubset(found_ids)
-    except Exception:
-        return False
+def get_last_data_row(ws):
+    last = 1
+    for row_idx in range(2, ws.max_row + 1):
+        if ws.cell(row=row_idx, column=2).value:
+            last = row_idx
+    return last
 
 
-def do_write(rows, my_username, tab_name, xlsx_path, tmp_path):
-    """Copy, modify, copy back. Returns (success, message)."""
-    # Copy from Shared Drive to /tmp
-    shutil.copy2(str(xlsx_path), str(tmp_path))
+def main():
+    if not os.path.exists(CONFIG_PATH):
+        print("Error: config.json not found.", file=sys.stderr)
+        sys.exit(1)
 
-    # Open and modify
-    wb = load_workbook(str(tmp_path))
+    with open(CONFIG_PATH) as f:
+        config = json.load(f)
+
+    rows = json.loads(sys.stdin.read())
+    if not rows:
+        print("No rows to write.")
+        return
+
+    xlsx_path = get_xlsx_path(config)
+    tab_name = get_week_tab_name()
+    my_username = config["softtek_username"]
+    tmp_path = Path(tempfile.gettempdir()) / f"Click2Sync_{my_username}.xlsx"
+
+    # Copy to /tmp for editing (or create new if doesn't exist)
+    if xlsx_path.exists():
+        shutil.copy2(str(xlsx_path), str(tmp_path))
+        wb = load_workbook(str(tmp_path))
+    else:
+        wb = Workbook()
+        if "Sheet" in wb.sheetnames:
+            del wb["Sheet"]
 
     if tab_name not in wb.sheetnames:
         ws = wb.create_sheet(tab_name)
@@ -280,15 +234,16 @@ def do_write(rows, my_username, tab_name, xlsx_path, tmp_path):
     last_req_no = get_last_request_no(wb, tab_name)
     counter = last_req_no + 1
 
+    # Build index: task_id -> row_number
     existing_task_rows = {}
     for row_idx in range(2, ws.max_row + 1):
-        owner = ws.cell(row=row_idx, column=2).value
         desc = ws.cell(row=row_idx, column=6).value
-        if owner and str(owner) == my_username and desc:
+        if desc:
             task_id = extract_task_id(desc)
             if task_id:
                 existing_task_rows[task_id] = row_idx
 
+    # Update existing or append new
     updated_count = 0
     new_rows = []
 
@@ -307,6 +262,7 @@ def do_write(rows, my_username, tab_name, xlsx_path, tmp_path):
             new_rows.append(row)
             counter += 1
 
+    # Append new rows after last data row
     if new_rows:
         start_row = get_last_data_row(ws) + 1
         for i, row_data in enumerate(new_rows):
@@ -315,86 +271,21 @@ def do_write(rows, my_username, tab_name, xlsx_path, tmp_path):
     set_column_widths(ws)
 
     if updated_count == 0 and not new_rows:
-        return True, f"All rows up to date for '{my_username}' in '{tab_name}'."
+        print(f"All rows up to date in '{tab_name}'.")
+        tmp_path.unlink(missing_ok=True)
+        return
 
-    # Save and copy back
+    # Save and copy back to Shared Drive
     wb.save(str(tmp_path))
     shutil.copy2(str(tmp_path), str(xlsx_path))
+    tmp_path.unlink(missing_ok=True)
 
     parts = []
     if new_rows:
         parts.append(f"{len(new_rows)} new")
     if updated_count:
         parts.append(f"{updated_count} updated")
-    return True, f"{', '.join(parts)} rows in '{tab_name}' in Click2SyncReport.xlsx"
-
-
-def main():
-    if not os.path.exists(CONFIG_PATH):
-        print("Error: config.json not found.", file=sys.stderr)
-        sys.exit(1)
-
-    with open(CONFIG_PATH) as f:
-        config = json.load(f)
-
-    rows = json.loads(sys.stdin.read())
-    if not rows:
-        print("No rows to write.")
-        return
-
-    xlsx_path = get_xlsx_path()
-    tab_name = get_week_tab_name()
-    my_username = config["softtek_username"]
-    lock_path = xlsx_path.parent / "c2c_write.lock"
-    tmp_path = Path(tempfile.gettempdir()) / "Click2SyncReport_edit.xlsx"
-
-    # Collect expected task IDs for verification
-    expected_task_ids = set()
-    for row in rows:
-        tid = extract_task_id(row.get("shortDescription", ""))
-        if tid:
-            expected_task_ids.add(tid)
-
-    # Acquire lock
-    acquire_lock(lock_path, my_username)
-
-    try:
-        for attempt in range(1, MAX_RETRIES + 1):
-            if attempt > 1:
-                print(f"Retry {attempt}/{MAX_RETRIES} (waiting {RETRY_DELAY}s)...", flush=True)
-                time.sleep(RETRY_DELAY)
-
-            print("Writing rows...", flush=True)
-            success, message = do_write(rows, my_username, tab_name, xlsx_path, tmp_path)
-
-            if not success:
-                print(f"Attempt {attempt} failed: {message}", file=sys.stderr)
-                continue
-
-            if "up to date" in message:
-                print(message)
-                tmp_path.unlink(missing_ok=True)
-                return
-
-            # Verify: wait a moment then re-read the file
-            time.sleep(3)
-            if verify_write(xlsx_path, tab_name, my_username, expected_task_ids):
-                print(message)
-                tmp_path.unlink(missing_ok=True)
-                return
-            else:
-                print(f"Attempt {attempt}: Verification failed, retrying...", file=sys.stderr)
-
-        # All retries failed
-        print("=" * 60, file=sys.stderr)
-        print("  WRITE FAILED after all retries.", file=sys.stderr)
-        print("  Your rows were NOT saved. Wait 1 minute and try again.", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-        tmp_path.unlink(missing_ok=True)
-        sys.exit(1)
-
-    finally:
-        release_lock(lock_path)
+    print(f"{', '.join(parts)} rows in '{tab_name}' in {xlsx_path.name}")
 
 
 if __name__ == "__main__":
