@@ -345,7 +345,7 @@ def main():
     xlsx_path = get_xlsx_path()
     tab_name = get_week_tab_name()
     my_username = config["softtek_username"]
-    lock_path = xlsx_path.parent / ".c2c_write.lock"
+    lock_path = xlsx_path.parent / "c2c_write.lock"
     tmp_path = Path(tempfile.gettempdir()) / "Click2SyncReport_edit.xlsx"
 
     # Collect expected task IDs for verification
