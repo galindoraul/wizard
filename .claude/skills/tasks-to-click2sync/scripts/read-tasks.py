@@ -74,19 +74,21 @@ def parse_title(title):
 
 def parse_description_keys(description):
     """Parse [Key] : Value pairs from task description.
-    Handles: bold (**), italic (*), underline (__), no spaces, extra spaces.
+    Handles: bold, italic, underline, strikethrough, no spaces, text between keys.
     """
     keys = {}
-    # Strip ALL markdown formatting
     clean = re.sub(r'[*_~]+', '', description)
-    # Normalize whitespace
     clean = re.sub(r'[ \t]+', ' ', clean)
 
-    for match in re.finditer(r'\[([^\]]+)\]\s*:\s*([^\[]*)', clean):
+    for line in clean.split('\n'):
+        line = line.strip()
+        match = re.match(r'\[([^\]]+)\]\s*:\s*(.*)', line)
+        if not match:
+            continue
         key = match.group(1).strip()
         if key == key.upper() and len(key) > 2:
             continue
-        raw = match.group(2)
+        raw = match.group(2).strip()
         non_ascii = re.search(r'[^\x00-\x7F]', raw)
         value = (raw[:non_ascii.start()] if non_ascii else raw).strip()
         if value:

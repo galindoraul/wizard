@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Reads PTO Tracker from Google Sheets and returns PersonWeekContext for the current week."""
+"""Reads PTO Tracker from Google Sheets and returns PersonWeekContext for the current week.
+Handles weeks that span two months (e.g., Jun 30 - Jul 4)."""
 
 import json
 import subprocess
@@ -29,16 +30,6 @@ def get_week_of_month(date):
     return (diff // 7) + 1
 
 
-def get_month_workdays(year, month):
-    days_in_month = monthrange(year, month)[1]
-    workdays = []
-    for day in range(1, days_in_month + 1):
-        d = datetime(year, month, day)
-        if d.weekday() < 5:
-            workdays.append(d)
-    return workdays
-
-
 def get_current_week_dates():
     today = datetime.now()
     monday = today - timedelta(days=today.weekday())
@@ -48,7 +39,7 @@ def get_current_week_dates():
 
 
 def get_week_workdays(monday):
-    return [(monday + timedelta(days=i)).day for i in range(5)]
+    return [(monday + timedelta(days=i)) for i in range(5)]
 
 
 def read_sheet_data(sheet_name):
@@ -137,7 +128,7 @@ def parse_pto_data(rows):
             if val in ("h", "holiday"):
                 holiday_days.add(day_num)
 
-    # Parse employee absences (row 9+, index 8+)
+    # Parse employee absences
     employees = {}
     for row_idx in range(HEADER_ROW, len(rows)):
         row = rows[row_idx]
@@ -163,42 +154,110 @@ def parse_pto_data(rows):
     return employees, holiday_days, day_columns
 
 
-def build_week_context(employee_data, holiday_days, year, month):
-    monday, friday = get_current_week_dates()
-    week_workdays = get_week_workdays(monday)
+def load_month_data(month, year):
+    """Load PTO data for a given month. Returns (employees, holiday_days) or (None, None) on failure."""
+    sheet_name = f"{get_month_name(month)} {year}"
+    rows = read_sheet_data(sheet_name)
+    if not rows:
+        return {}, set()
 
+    employees, holiday_days, _ = parse_pto_data(rows)
+
+    # Also detect holidays by header color
+    color_holidays = read_header_colors(sheet_name)
+    holiday_days = holiday_days | color_holidays
+
+    return employees, holiday_days
+
+
+def build_week_context(softtek_pto_name, monday, friday):
+    """Build week context handling cross-month weeks."""
+    week_workdays = get_week_workdays(monday)  # list of datetime objects
+
+    # Determine which months we need to read
+    months_needed = set()
+    for day in week_workdays:
+        months_needed.add((day.month, day.year))
+
+    # Load data for each month
+    all_employees = {}  # name -> absences list
+    all_holidays = {}   # (month, day_num) -> True
+
+    for month, year in months_needed:
+        employees, holiday_days = load_month_data(month, year)
+
+        # Merge holidays (stored with month context)
+        for day_num in holiday_days:
+            all_holidays[(month, day_num)] = True
+
+        # Merge employee absences
+        for name_key, emp_data in employees.items():
+            if name_key not in all_employees:
+                all_employees[name_key] = {"name": emp_data["name"], "absences": []}
+            for absence in emp_data["absences"]:
+                # Tag absence with its month for cross-month matching
+                all_employees[name_key]["absences"].append({
+                    "dayNumber": absence["dayNumber"],
+                    "type": absence["type"],
+                    "month": month,
+                })
+
+    # Find this user
+    user_data = all_employees.get(softtek_pto_name.lower())
+
+    # Calculate absences and holidays for this week
     absence_days = []
     week_holiday_days = []
 
-    for absence in employee_data["absences"]:
-        day_num = absence["dayNumber"]
-        if day_num not in week_workdays:
+    for workday in week_workdays:
+        day_num = workday.day
+        month = workday.month
+
+        # Check if this day is a holiday
+        if (month, day_num) in all_holidays:
+            week_holiday_days.append(day_num)
             continue
-        normalized_type = absence["type"].strip().lower()
-        if normalized_type in ("h", "holiday"):
-            week_holiday_days.append(day_num)
-        elif normalized_type in ABSENCE_TYPES:
-            absence_days.append(day_num)
 
-    for day_num in holiday_days:
-        if day_num in week_workdays and day_num not in week_holiday_days:
-            week_holiday_days.append(day_num)
+        # Check user absences
+        if user_data:
+            for absence in user_data["absences"]:
+                if absence["dayNumber"] == day_num and absence["month"] == month:
+                    normalized_type = absence["type"].strip().lower()
+                    if normalized_type in ("h", "holiday"):
+                        if day_num not in week_holiday_days:
+                            week_holiday_days.append(day_num)
+                    elif normalized_type in ABSENCE_TYPES:
+                        absence_days.append(day_num)
+                    break
 
+    # Calculate working days
     non_working = set(absence_days + week_holiday_days)
-    working_days = [d for d in week_workdays if d not in non_working]
+    working_days_list = [d for d in week_workdays if d.day not in non_working]
 
+    # Adjust start/finish dates for holidays/absences at edges
     expected_start = monday
     expected_finish = friday
 
-    if monday.day in set(week_holiday_days):
-        expected_start = monday + timedelta(days=1)
-    if friday.day in set(week_holiday_days):
-        expected_finish = friday - timedelta(days=1)
+    if monday.day in set(week_holiday_days) or monday.day in set(absence_days):
+        # Find first working day
+        for d in week_workdays:
+            if d.day not in non_working:
+                expected_start = d
+                break
+
+    if friday.day in set(week_holiday_days) or friday.day in set(absence_days):
+        # Find last working day
+        for d in reversed(week_workdays):
+            if d.day not in non_working:
+                expected_finish = d
+                break
+
+    name = user_data["name"] if user_data else softtek_pto_name
 
     return {
-        "name": employee_data["name"],
-        "working_days": len(working_days),
-        "expected_hours": len(working_days) * 8,
+        "name": name,
+        "working_days": len(working_days_list),
+        "expected_hours": len(working_days_list) * 8,
         "expected_start_date": expected_start.strftime("%m/%d/%Y"),
         "expected_finish_date": expected_finish.strftime("%m/%d/%Y"),
         "absence_days": absence_days,
@@ -207,14 +266,13 @@ def build_week_context(employee_data, holiday_days, year, month):
 
 
 def get_week_context(softtek_pto_name):
-    now = datetime.now()
-    month_name = get_month_name(now.month)
-    year = now.year
-    sheet_name = f"{month_name} {year}"
+    """Main function: returns PersonWeekContext for the given user."""
     monday, friday = get_current_week_dates()
 
-    rows = read_sheet_data(sheet_name)
-    if not rows:
+    try:
+        return build_week_context(softtek_pto_name, monday, friday)
+    except Exception as e:
+        print(f"Warning: PTO read failed ({e}), using defaults.", file=sys.stderr)
         return {
             "name": softtek_pto_name,
             "working_days": 5,
@@ -224,34 +282,6 @@ def get_week_context(softtek_pto_name):
             "absence_days": [],
             "holiday_days": [],
         }
-
-    employees, holiday_days, _ = parse_pto_data(rows)
-
-    # Also detect holidays by header color (#b4a7d6)
-    color_holidays = read_header_colors(sheet_name)
-    holiday_days = holiday_days | color_holidays
-
-    user_data = employees.get(softtek_pto_name.lower())
-    if not user_data:
-        week_workdays = get_week_workdays(monday)
-        working_days = [d for d in week_workdays if d not in holiday_days]
-        expected_start = monday
-        expected_finish = friday
-        if monday.day in holiday_days:
-            expected_start = monday + timedelta(days=1)
-        if friday.day in holiday_days:
-            expected_finish = friday - timedelta(days=1)
-        return {
-            "name": softtek_pto_name,
-            "working_days": len(working_days),
-            "expected_hours": len(working_days) * 8,
-            "expected_start_date": expected_start.strftime("%m/%d/%Y"),
-            "expected_finish_date": expected_finish.strftime("%m/%d/%Y"),
-            "absence_days": [],
-            "holiday_days": list(holiday_days),
-        }
-
-    return build_week_context(user_data, holiday_days, year, now.month)
 
 
 if __name__ == "__main__":
