@@ -82,7 +82,7 @@ def main():
     shutil.copy2(str(tmp_path), str(json_path))
     tmp_path.unlink(missing_ok=True)
 
-    print(f"{len(rows)} rows written to '{tab_name}' in {json_path.name}")
+    print(f"{len(rows)} rows written to '{tab_name}'")
 
 
 if __name__ == "__main__":

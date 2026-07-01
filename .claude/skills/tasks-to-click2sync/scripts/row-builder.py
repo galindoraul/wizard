@@ -37,17 +37,59 @@ ESTIMATION_LINKS = {
     "Test Execution & Reporting": "https://onesofttek.sharepoint.com/:f:/r/sites/SKPmetap/qanstt/Shared%20Documents/Project%20Tracking/Quality%20Tools/Estimations?csf=1&web=1&e=MWJjR3",
 }
 
+# ─── Fields that MUST be integers (keep in sync with validate-tasks.py) ───
+INT_FIELDS = [
+    "Products",
+    "TC Pass",
+    "TC Fail",
+    "TC Blocked",
+    "Qty Bugs Closed",
+    "Qty Bugs Re-opened",
+    "Qty Bugs Verified",
+    "Qty New Bugs Found",
+]
+
+# ─── Fields that allow decimals ───
+DECIMAL_FIELDS = [
+    "Effort",
+    "Peer Review Scheduled Effort",
+]
+
 
 def load_config():
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
 
-def safe_num(value, default=0):
+def safe_int(value, default=0):
+    """Parse as integer. Handles '2.0' -> 2."""
     try:
-        return float(value) if value else default
+        return int(float(value)) if value else default
     except (ValueError, TypeError):
         return default
+
+
+def safe_int_str(value):
+    """Parse as integer, return as string. Empty if no value."""
+    if not value:
+        return ""
+    try:
+        return str(int(float(value)))
+    except (ValueError, TypeError):
+        return ""
+
+
+def safe_num_str(value):
+    """Parse as number, return as clean string. Removes trailing .0 if integer."""
+    if not value:
+        return ""
+    try:
+        val = float(value)
+        if val == int(val):
+            return str(int(val))
+        return str(val)
+    except (ValueError, TypeError):
+        return ""
 
 
 def build_rows(tasks, config, week_context):
@@ -69,18 +111,15 @@ def build_rows(tasks, config, week_context):
         is_design_with_peer = is_design and req_subtype in PEER_REVIEW_SUBTYPES
         is_execution = req_type == "Test Execution & Reporting"
 
-        effort = dk.get("Effort", "")
-        peer_effort = dk.get("Peer Review Scheduled Effort", "") if is_design_with_peer else ""
-        net_effort = effort
-        if effort and peer_effort:
-            net_effort = str(int(safe_num(effort)) - int(safe_num(peer_effort)))
+        effort = safe_num_str(dk.get("Effort", ""))
+        peer_effort = safe_num_str(dk.get("Peer Review Scheduled Effort", "")) if is_design_with_peer else ""
 
-        tc_pass = dk.get("TC Pass", "") if is_execution else ""
-        tc_fail = dk.get("TC Fail", "") if is_execution else ""
-        tc_blocked = dk.get("TC Blocked", "") if is_execution else ""
+        tc_pass = safe_int_str(dk.get("TC Pass", "")) if is_execution else ""
+        tc_fail = safe_int_str(dk.get("TC Fail", "")) if is_execution else ""
+        tc_blocked = safe_int_str(dk.get("TC Blocked", "")) if is_execution else ""
         total = ""
         if is_execution and tc_pass:
-            total = str(int(safe_num(tc_pass)) + int(safe_num(tc_fail)) + int(safe_num(tc_blocked)))
+            total = str(safe_int(tc_pass) + safe_int(tc_fail) + safe_int(tc_blocked))
 
         rows.append({
             "taskId": task.get("id", ""),
@@ -95,16 +134,16 @@ def build_rows(tasks, config, week_context):
             "moduleFeature": task.get("module", ""),
             "team": task.get("team", ""),
             "numberOfDefectiveProducts": "",
-            "numberOfProducts": dk.get("Products", "") if not is_execution else "",
+            "numberOfProducts": safe_int_str(dk.get("Products", "")) if not is_execution else "",
             "totalOfTestCases": "",
             "total": total,
             "pass": tc_pass,
             "fail": tc_fail,
             "cantTest": tc_blocked,
-            "qtyBugsClosed": dk.get("Qty Bugs Closed", "") if is_execution else "",
-            "qtyBugsReopened": dk.get("Qty Bugs Re-opened", "") if is_execution else "",
-            "qtyBugsVerified": dk.get("Qty Bugs Verified", "") if is_execution else "",
-            "qtyNewBugsFound": dk.get("Qty New Bugs Found", "") if is_execution else "",
+            "qtyBugsClosed": safe_int_str(dk.get("Qty Bugs Closed", "")) if is_execution else "",
+            "qtyBugsReopened": safe_int_str(dk.get("Qty Bugs Re-opened", "")) if is_execution else "",
+            "qtyBugsVerified": safe_int_str(dk.get("Qty Bugs Verified", "")) if is_execution else "",
+            "qtyNewBugsFound": safe_int_str(dk.get("Qty New Bugs Found", "")) if is_execution else "",
             "releaseBuild": "Minor",
             "completePercent": "100",
             "defectsAdviceFlag": "",
@@ -114,14 +153,14 @@ def build_rows(tasks, config, week_context):
             "scheduledStartDate": start_date,
             "scheduledFinishDate": finish_date,
             "scheduledDuration": working_days,
-            "scheduledEffort": net_effort,
+            "scheduledEffort": effort,
             "peerReviewScheduledEffort": peer_effort,
             "scheduledReworkEffort": "",
             "scheduledUATReworkEffort": "",
             "actualStartDate": start_date,
             "actualFinishDate": finish_date,
             "actualDuration": working_days,
-            "actualEffort": net_effort,
+            "actualEffort": effort,
             "peerReviewActualEffort": peer_effort,
             "actualReworkEffort": "",
             "actualUATReworkEffort": "",
