@@ -82,7 +82,7 @@ def parse_description_keys(description):
 
     for line in clean.split('\n'):
         line = line.strip()
-        match = re.match(r'\[([^\]]+)\]\s*:\s*(.*)', line)
+        match = re.match(r'^[-•*]?\s*\[([^\]]+)\]\s*:\s*(.*)', line)
         if not match:
             continue
         key = match.group(1).strip()
