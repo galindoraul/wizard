@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 pto_reader = import_module("pto-reader")
 
-# Maps [Type] value from description → (Requirement Type, Requirement Subtype)
 TYPE_MAP = {
     "Test Plan": ("Test Planning", "Test Plan"),
     "Test Strategy": ("Test Planning", "Test Strategy"),
@@ -22,12 +21,13 @@ TYPE_MAP = {
     "Test Case": ("Test Design", "Test Case"),
     "Test Data": ("Test Design", "Test Data"),
     "Set Up & Configure Test Environment": ("Test Implementation", "Set Up & Configure Test Environment"),
+    "Management": ("Project Tracking Activities", "Management"),
+    "Training": ("Project Tracking Activities", "Training"),
     "Test Case Execution": ("Test Execution & Reporting", "Test Case Execution"),
+    "Adhoc Testing": ("Test Execution & Reporting", "Adhoc Testing"),
     "Defect Verification": ("Test Execution & Reporting", "Defect Verification"),
     "Log in Defect": ("Test Execution & Reporting", "Log in Defect"),
     "Test Summary Report": ("Test Execution & Reporting", "Test Summary Report"),
-    "Management": ("Project Tracking Activities", "Management"),
-    "Training": ("Project Tracking Activities", "Training"),
 }
 
 PEER_REVIEW_SUBTYPES = ["Test Case", "Test Script"]
@@ -50,10 +50,8 @@ def safe_num(value, default=0):
         return default
 
 
-def build_rows(tasks, config, week_context, start_request_no):
+def build_rows(tasks, config, week_context):
     rows = []
-    counter = start_request_no
-
     softtek_username = config["softtek_username"]
     start_date = week_context["expected_start_date"]
     finish_date = week_context["expected_finish_date"]
@@ -84,21 +82,14 @@ def build_rows(tasks, config, week_context, start_request_no):
         if is_execution and tc_pass:
             total = str(int(safe_num(tc_pass)) + int(safe_num(tc_fail)) + int(safe_num(tc_blocked)))
 
-        # Short Description with task ID prefix: [TaskID] Description
-        task_id = task.get("id", "")
-        short_desc = task.get("shortDescription", "")
-        if task_id:
-            short_description = f"[{task_id}] {short_desc}"
-        else:
-            short_description = short_desc
-
         rows.append({
+            "taskId": task.get("id", ""),
             "projectId": "1-0000029582-3",
             "createdBy": softtek_username,
-            "requestNo": f"29582-3-{counter:05d}",
+            "requestNo": "",
             "assignTo": softtek_username,
             "peerReviewer": softtek_username if is_design_with_peer else "",
-            "shortDescription": short_description,
+            "shortDescription": task.get("shortDescription", ""),
             "requirementType": req_type,
             "requirementSubtype": req_subtype,
             "moduleFeature": task.get("module", ""),
@@ -140,7 +131,6 @@ def build_rows(tasks, config, week_context, start_request_no):
             "peerReviewChecklist": PEER_REVIEW_CHECKLIST_LINK if is_design else "",
             "estimationLink": ESTIMATION_LINKS.get(req_type, ""),
         })
-        counter += 1
 
     return rows
 
@@ -154,8 +144,7 @@ def main():
         return
 
     week_context = pto_reader.get_week_context(config["softtek_pto_name"])
-    start_request_no = 10200  # placeholder, sheets-writer adjusts
-    rows = build_rows(tasks, config, week_context, start_request_no)
+    rows = build_rows(tasks, config, week_context)
     print(json.dumps(rows))
 
 

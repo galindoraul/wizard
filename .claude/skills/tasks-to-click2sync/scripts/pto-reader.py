@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Reads PTO Tracker from Google Sheets and returns PersonWeekContext for the current week.
-Handles weeks that span two months. Detects holidays by text only (H/Holiday in row 3)."""
+Handles weeks that span two months. Detects holidays by text only (H/Holiday in row 3).
+Caches results in /tmp for 5 minutes to avoid repeated API calls."""
 
 import json
+import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from calendar import monthrange
 
 PTO_SHEET_ID = "1Vae2OUAdYT3pMAQLLSYcNRBFklJ2WybctNia6OjNK_g"
 HEADER_ROW = 8
 ABSENCE_TYPES = ["pto", "ml", "pto(pa)", "ml(pa)"]
+
+CACHE_DIR = "/tmp"
+CACHE_TTL = 300  # 5 minutes
 
 
 def get_month_name(month_number):
@@ -203,11 +209,22 @@ def build_week_context(softtek_pto_name, monday, friday):
 
 
 def get_week_context(softtek_pto_name):
-    """Main function: returns PersonWeekContext for the given user."""
+    """Main function: returns PersonWeekContext for the given user. Cached for 5 min."""
     monday, friday = get_current_week_dates()
 
+    # Check cache
+    cache_key = f"c2c_pto_{softtek_pto_name.replace(' ', '_')}_{monday.strftime('%Y%m%d')}"
+    cache_path = os.path.join(CACHE_DIR, f"{cache_key}.json")
+
+    if os.path.exists(cache_path):
+        age = time.time() - os.path.getmtime(cache_path)
+        if age < CACHE_TTL:
+            with open(cache_path) as f:
+                return json.load(f)
+
+    # Build fresh
     try:
-        return build_week_context(softtek_pto_name, monday, friday)
+        context = build_week_context(softtek_pto_name, monday, friday)
     except Exception as e:
         print(f"Warning: PTO read failed ({e}), using defaults.", file=sys.stderr)
         return {
@@ -219,6 +236,12 @@ def get_week_context(softtek_pto_name):
             "absence_days": [],
             "holiday_days": [],
         }
+
+    # Save to cache
+    with open(cache_path, "w") as f:
+        json.dump(context, f)
+
+    return context
 
 
 if __name__ == "__main__":

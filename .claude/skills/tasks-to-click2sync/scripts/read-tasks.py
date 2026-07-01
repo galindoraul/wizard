@@ -105,7 +105,7 @@ def main():
 
     result = subprocess.run(
         ["meta", "tasks.task", "list", f"--fburl={url}",
-         "--columns=number,title,owner,description,progress,tags",
+         "--columns=number,title,description",
          "-l", "100", "-o", "json"],
         capture_output=True, text=True
     )
@@ -143,10 +143,7 @@ def main():
             "team": title_parsed["team"],
             "category": category,
             "shortDescription": title_parsed["shortDescription"],
-            "status": task.get("progress", ""),
             "descriptionKeys": desc_keys,
-            "tags": tags,
-            "owner": task.get("owner", ""),
         })
 
     print(json.dumps(output))
