@@ -18,23 +18,27 @@ if [ -d "$REPO_DIR/.git" ]; then
     cd "$REPO_DIR" && git pull
 else
     echo "📦 First-time setup..."
-    mkdir -p "$REPO_DIR"
+    mkdir -p "$(dirname "$REPO_DIR")"
     git clone "$REPO_URL" "$REPO_DIR"
 fi
 
-# Auto-detect and symlink all skills
+# Auto-detect and symlink all skills from .claude/skills/
 mkdir -p "$SKILLS_DIR"
 count=0
 echo ""
 echo "🔗 Installed skills:"
-for skill_dir in "$REPO_DIR"/*/; do
-    if [ -f "$skill_dir/SKILL.md" ]; then
-        skill_name=$(basename "$skill_dir")
-        ln -sf "$skill_dir" "$SKILLS_DIR/$skill_name"
-        echo "   ✅ /$skill_name"
-        count=$((count + 1))
-    fi
-done
+
+SKILLS_SRC="$REPO_DIR/.claude/skills"
+if [ -d "$SKILLS_SRC" ]; then
+    for skill_dir in "$SKILLS_SRC"/*/; do
+        if [ -f "$skill_dir/SKILL.md" ]; then
+            skill_name=$(basename "$skill_dir")
+            ln -sf "$skill_dir" "$SKILLS_DIR/$skill_name"
+            echo "   ✅ /$skill_name"
+            count=$((count + 1))
+        fi
+    done
+fi
 
 echo ""
 echo "─────────────────────────────"
