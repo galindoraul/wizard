@@ -1,14 +1,17 @@
 #!/bin/bash
-# install.sh — Wizard Skills Installer
+# install.sh — Wizard
 # Downloads and installs all available skills for your Claude environment.
 # Run this script once to install, or again anytime to update.
+# Usage: cd ~/.wizard && claude
 
 REPO_URL="https://github.com/galindoraul/wizard.git"
-REPO_DIR="$HOME/.wizard/wizard"
-SKILLS_DIR="$HOME/.claude/skills"
+WIZARD_DIR="$HOME/.wizard"
+REPOS_DIR="$WIZARD_DIR/.repos"
+REPO_DIR="$REPOS_DIR/wizard"
+SKILLS_DIR="$WIZARD_DIR/.claude/skills"
 
 echo ""
-echo "🧙 Wizard — Skills Installer"
+echo "🧙 Wizard"
 echo "─────────────────────────────"
 echo ""
 
@@ -18,11 +21,11 @@ if [ -d "$REPO_DIR/.git" ]; then
     cd "$REPO_DIR" && git pull
 else
     echo "📦 First-time setup..."
-    mkdir -p "$(dirname "$REPO_DIR")"
+    mkdir -p "$REPOS_DIR"
     git clone "$REPO_URL" "$REPO_DIR"
 fi
 
-# Auto-detect and symlink all skills from .claude/skills/
+# Auto-detect and symlink all skills
 mkdir -p "$SKILLS_DIR"
 count=0
 echo ""
@@ -42,5 +45,7 @@ fi
 
 echo ""
 echo "─────────────────────────────"
-echo "✅ Done! $count skill(s) ready to use in Claude."
+echo "✅ Done! $count skill(s) ready."
+echo ""
+echo "To use: cd ~/.wizard && claude"
 echo ""
