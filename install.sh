@@ -4,48 +4,65 @@
 # Run this script once to install, or again anytime to update.
 # Usage: cd ~/.wizard && claude
 
-REPO_URL="https://github.com/galindoraul/wizard.git"
 WIZARD_DIR="$HOME/.wizard"
-REPOS_DIR="$WIZARD_DIR/.repos"
-REPO_DIR="$REPOS_DIR/wizard"
-SKILLS_DIR="$WIZARD_DIR/.claude/skills"
+REPO_DIR="$WIZARD_DIR/wizard"
+CLAUDE_DIR="$WIZARD_DIR/.claude"
 
 echo ""
 echo "🧙 Wizard"
-echo "─────────────────────────────"
+echo "───────────────────────────────────"
 echo ""
 
 # Clone or update
+mkdir -p "$WIZARD_DIR"
 if [ -d "$REPO_DIR/.git" ]; then
-    echo "📥 Updating skills..."
+    echo "📥 Updating..."
     cd "$REPO_DIR" && git pull
 else
     echo "📦 First-time setup..."
-    mkdir -p "$REPOS_DIR"
-    git clone "$REPO_URL" "$REPO_DIR"
+    git clone https://github.com/galindoraul/wizard.git "$REPO_DIR"
 fi
 
-# Auto-detect and symlink all skills
-mkdir -p "$SKILLS_DIR"
-count=0
-echo ""
-echo "🔗 Installed skills:"
+# Clean old symlinks
+rm -rf "$CLAUDE_DIR"
+mkdir -p "$CLAUDE_DIR"
 
-SKILLS_SRC="$REPO_DIR/.claude/skills"
-if [ -d "$SKILLS_SRC" ]; then
-    for skill_dir in "$SKILLS_SRC"/*/; do
-        if [ -f "$skill_dir/SKILL.md" ]; then
-            skill_name=$(basename "$skill_dir")
-            ln -sf "$skill_dir" "$SKILLS_DIR/$skill_name"
-            echo "   ✅ /$skill_name"
-            count=$((count + 1))
-        fi
+# Process all .claude/ contents from repo
+process_repo() {
+    local repo_dir="$1"
+    local label="$2"
+    local src="$repo_dir/.claude"
+
+    [ ! -d "$src" ] && return
+
+    for subdir in "$src"/*/; do
+        [ ! -d "$subdir" ] && continue
+        subdir_name=$(basename "$subdir")
+        target="$CLAUDE_DIR/$subdir_name"
+        mkdir -p "$target"
+
+        for item in "$subdir"*/; do
+            [ ! -d "$item" ] && continue
+            item_name=$(basename "$item")
+            ln -sf "$item" "$target/$item_name"
+            echo "   ✅ $subdir_name/$item_name"
+        done
     done
-fi
+
+    for file in "$src"/*; do
+        [ -d "$file" ] && continue
+        [ ! -f "$file" ] && continue
+        file_name=$(basename "$file")
+        ln -sf "$file" "$CLAUDE_DIR/$file_name"
+        echo "   ✅ $file_name"
+    done
+}
 
 echo ""
-echo "─────────────────────────────"
-echo "✅ Done! $count skill(s) ready."
+echo "🔗 Installed:"
+process_repo "$REPO_DIR" "wizard"
+
 echo ""
-echo "To use: cd ~/.wizard && claude"
+echo "───────────────────────────────────"
+echo "✅ Done! Use: cd ~/.wizard && claude"
 echo ""
