@@ -11,7 +11,7 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.realpath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
 SKILLS_DIR = os.path.dirname(SKILL_DIR)
 CONFIG_PATH = os.path.join(SKILLS_DIR, "config.json")
