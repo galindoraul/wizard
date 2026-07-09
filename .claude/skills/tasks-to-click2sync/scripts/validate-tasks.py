@@ -40,6 +40,7 @@ TYPE_MAP = {
         "Set Up & Configure Test Environment",
     ),
     "Test Case Execution": ("Test Execution & Reporting", "Test Case Execution"),
+    "Adhoc Testing": ("Test Execution & Reporting", "Adhoc Testing"),
     "Defect Verification": ("Test Execution & Reporting", "Defect Verification"),
     "Log in Defect": ("Test Execution & Reporting", "Log in Defect"),
     "Test Summary Report": ("Test Execution & Reporting", "Test Summary Report"),
@@ -274,7 +275,7 @@ def validate_task(task):
         )
 
     # ── Productivity warnings ──
-    if req_subtype == "Test Case Execution" and total > 0:
+    if req_subtype in ("Test Case Execution", "Adhoc Testing") and total > 0:
         ratio = effort / total
         if ratio > 1:
             warnings.append(
