@@ -1,8 +1,5 @@
 #!/bin/bash
 # install.sh — Wizard
-# Downloads and installs all available skills for your Claude environment.
-# Run this script once to install, or again anytime to update.
-
 WIZARD_DIR="$HOME/.wizard"
 REPO_DIR="$WIZARD_DIR/wizard"
 CLAUDE_DIR="$WIZARD_DIR/.claude"
@@ -12,14 +9,14 @@ echo "🧙 Wizard"
 echo "───────────────────────────────────"
 echo ""
 
-# Clone or update
+# Clone or update (anonymous access, ignore cached credentials)
 mkdir -p "$WIZARD_DIR"
 if [ -d "$REPO_DIR/.git" ]; then
     echo "📥 Updating..."
-    cd "$REPO_DIR" && git pull
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git -c credential.helper= -C "$REPO_DIR" pull
 else
     echo "📦 First-time setup..."
-    git clone https://github.com/galindoraul/wizard.git "$REPO_DIR"
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git -c credential.helper= clone https://github.com/galindoraul/wizard.git "$REPO_DIR"
 fi
 
 # Clean old symlinks
@@ -30,15 +27,12 @@ mkdir -p "$CLAUDE_DIR"
 process_repo() {
     local repo_dir="$1"
     local src="$repo_dir/.claude"
-
     [ ! -d "$src" ] && return
-
     for subdir in "$src"/*/; do
         [ ! -d "$subdir" ] && continue
         subdir_name=$(basename "$subdir")
         target="$CLAUDE_DIR/$subdir_name"
         mkdir -p "$target"
-
         for item in "$subdir"*/; do
             [ ! -d "$item" ] && continue
             item_name=$(basename "$item")
@@ -46,7 +40,6 @@ process_repo() {
             echo "   ✅ $subdir_name/$item_name"
         done
     done
-
     for file in "$src"/*; do
         [ -d "$file" ] && continue
         [ ! -f "$file" ] && continue
@@ -59,18 +52,15 @@ process_repo() {
 echo "🔗 Installed:"
 process_repo "$REPO_DIR"
 
-# Add wizard alias with auto-update
+# Add wizard alias (safe: remove old + append new, no sed)
 SHELL_RC="$HOME/.zshrc"
 ALIAS_LINE='alias wizard="cd ~/.wizard && (cd wizard && git pull -q &) 2>/dev/null; claude"'
-if grep -q 'alias wizard=' "$SHELL_RC" 2>/dev/null; then
-    sed -i '' 's|alias wizard=.*|'"$ALIAS_LINE"'|' "$SHELL_RC"
-else
-    echo '' >> "$SHELL_RC"
-    echo "$ALIAS_LINE" >> "$SHELL_RC"
-fi
+grep -v 'alias wizard=' "$SHELL_RC" > "$SHELL_RC.tmp" 2>/dev/null && mv "$SHELL_RC.tmp" "$SHELL_RC"
+echo '' >> "$SHELL_RC"
+echo "$ALIAS_LINE" >> "$SHELL_RC"
+
 echo ""
 echo "   ⚡ Alias 'wizard' ready (auto-updates on launch)"
-
 echo ""
 echo "───────────────────────────────────"
 echo "✅ Done! Restart terminal, then type: wizard"

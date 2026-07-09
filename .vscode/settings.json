@@ -3,7 +3,7 @@
     ".claude/skills/tasks-creation": false,
     ".claude/skills/tasks-to-click2sync": false,
     "install.ps1": true,
-    "install.sh": true,
+    "install.sh": false,
   },
 
   "search.exclude": {
