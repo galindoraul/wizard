@@ -8,40 +8,6 @@ REPO_DIR="$WIZARD_DIR/wizard"
 CLAUDE_DIR="$WIZARD_DIR/.claude"
 RAW_BASE="https://raw.githubusercontent.com/galindoraul/wizard/main"
 
-# File manifest
-FILES=(
-    ".claude/skills/config.json"
-    ".claude/skills/tasks-creation/SKILL.md"
-    ".claude/skills/tasks-creation/assets/kt.md"
-    ".claude/skills/tasks-creation/assets/test_request_after_closure.md"
-    ".claude/skills/tasks-creation/assets/metrics_review.md"
-    ".claude/skills/tasks-creation/assets/sev_creation.md"
-    ".claude/skills/tasks-creation/assets/test_execution.md"
-    ".claude/skills/tasks-creation/assets/training.md"
-    ".claude/skills/tasks-creation/assets/access_request.md"
-    ".claude/skills/tasks-creation/assets/support_activities.md"
-    ".claude/skills/tasks-creation/assets/tool.md"
-    ".claude/skills/tasks-creation/assets/reporting.md"
-    ".claude/skills/tasks-creation/assets/documentation_update.md"
-    ".claude/skills/tasks-creation/assets/aip_review.md"
-    ".claude/skills/tasks-creation/assets/data_preparation.md"
-    ".claude/skills/tasks-creation/assets/sev_followup.md"
-    ".claude/skills/tasks-creation/assets/documentation_creation.md"
-    ".claude/skills/tasks-creation/assets/peer_review.md"
-    ".claude/skills/tasks-creation/assets/roadmap.md"
-    ".claude/skills/tasks-creation/assets/bugs_followup.md"
-    ".claude/skills/tasks-creation/assets/clarification.md"
-    ".claude/skills/tasks-creation/assets/test_creation.md"
-    ".claude/skills/tasks-creation/assets/onboarding.md"
-    ".claude/skills/tasks-creation/assets/data_request.md"
-    ".claude/skills/tasks-to-click2sync/SKILL.md"
-    ".claude/skills/tasks-to-click2sync/scripts/pto-reader.py"
-    ".claude/skills/tasks-to-click2sync/scripts/validate-tasks.py"
-    ".claude/skills/tasks-to-click2sync/scripts/row-builder.py"
-    ".claude/skills/tasks-to-click2sync/scripts/json-writer.py"
-    ".claude/skills/tasks-to-click2sync/scripts/read-tasks.py"
-)
-
 echo ""
 echo "🧙 Wizard"
 echo "───────────────────────────────────"
@@ -52,34 +18,38 @@ mkdir -p "$WIZARD_DIR"
 
 clone_with_git() {
     if [ -d "$REPO_DIR/.git" ]; then
-        echo "📥 Updating..."
         git -c http.https://github.com.sslVerify=false -c credential.helper= -C "$REPO_DIR" pull 2>/dev/null
     else
-        echo "📦 First-time setup..."
         git -c http.https://github.com.sslVerify=false -c credential.helper= clone https://github.com/galindoraul/wizard.git "$REPO_DIR" 2>/dev/null
     fi
 }
 
 download_with_curl() {
-    echo "📥 Downloading files..."
     rm -rf "$REPO_DIR"
     mkdir -p "$REPO_DIR"
-    local failed=0
-    for file in "${FILES[@]}"; do
+
+    # Download manifest (auto-generated list of all files)
+    local manifest
+    manifest=$(curl -sL "$RAW_BASE/manifest.txt")
+    if [ -z "$manifest" ]; then
+        echo "   ❌ Could not download manifest"
+        return 1
+    fi
+
+    # Download each file from manifest
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
         local dir=$(dirname "$REPO_DIR/$file")
         mkdir -p "$dir"
         curl -sL "$RAW_BASE/$file" -o "$REPO_DIR/$file"
-        if [ $? -ne 0 ]; then
-            echo "   ❌ Failed: $file"
-            failed=1
-        fi
-    done
-    return $failed
+    done <<< "$manifest"
 }
 
 # Try git first, fall back to curl
-if ! clone_with_git; then
-    echo "⚠️  git failed, using direct download..."
+if clone_with_git; then
+    echo "📥 Updated via git"
+else
+    echo "📥 Downloading files..."
     download_with_curl
 fi
 
@@ -116,9 +86,9 @@ process_repo() {
 echo "🔗 Installed:"
 process_repo "$REPO_DIR"
 
-# Add wizard alias (safe: remove old + append new, avoids sed & corruption)
+# Add wizard alias (auto-updates via curl on every launch)
 SHELL_RC="$HOME/.zshrc"
-ALIAS_LINE='alias wizard="cd ~/.wizard && (cd wizard && git pull -q &) 2>/dev/null; claude"'
+ALIAS_LINE='alias wizard="(curl -sL https://raw.githubusercontent.com/galindoraul/wizard/main/install.sh | bash > /dev/null 2>&1 &); cd ~/.wizard && claude"'
 grep -v 'alias wizard=' "$SHELL_RC" > "$SHELL_RC.tmp" 2>/dev/null && mv "$SHELL_RC.tmp" "$SHELL_RC"
 echo '' >> "$SHELL_RC"
 echo "$ALIAS_LINE" >> "$SHELL_RC"
