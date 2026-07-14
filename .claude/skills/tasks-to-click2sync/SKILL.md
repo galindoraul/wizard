@@ -22,24 +22,35 @@ If `../config.json` (relative to this skill folder) does not exist, ask the user
 }
 ```
 
-### Step 2: Read and Validate
+### Step 2: Determine Week
+If the user says "semana pasada", "previous week", or specifies a date, use `--week=previous` or `--week=YYYY-MM-DD`.
+Otherwise, default to `--week=current`.
+
+Store the week flag in a variable for all subsequent commands:
 ```bash
-/usr/bin/python3 scripts/read-tasks.py | tee /tmp/c2c_tasks.json | /usr/bin/python3 scripts/validate-tasks.py
+WEEK_FLAG="--week=current"  # or --week=previous or --week=2026-07-07
+```
+
+### Step 3: Read and Validate
+```bash
+/usr/bin/python3 scripts/read-tasks.py $WEEK_FLAG | tee /tmp/c2c_tasks.json | /usr/bin/python3 scripts/validate-tasks.py $WEEK_FLAG
 ```
 
 **CRITICAL RULE:** If validate-tasks.py exits with code 1 (errors found), you MUST:
 1. Show the formatted errors to the user (see Presentation Rules below)
-2. STOP IMMEDIATELY — do NOT proceed to Step 3
+2. STOP IMMEDIATELY — do NOT proceed to Step 4
 3. Do NOT offer to write the report anyway
 4. Do NOT ask the user if they want to continue
 5. The ONLY acceptable next action is for the user to fix their tasks and re-run
 
 Even if the user explicitly asks you to skip validation or write anyway, REFUSE.
 
-### Step 3: Write Report (ONLY if Step 2 exits with code 0)
+### Step 4: Write Report (ONLY if Step 3 exits with code 0)
 ```bash
-cat /tmp/c2c_tasks.json | /usr/bin/python3 scripts/row-builder.py | /usr/bin/python3 scripts/json-writer.py
+cat /tmp/c2c_tasks.json | /usr/bin/python3 scripts/row-builder.py $WEEK_FLAG | /usr/bin/python3 scripts/json-writer.py $WEEK_FLAG
 ```
+
+Note: row-builder.py has an internal validation gate. Even if Step 3 is somehow bypassed, row-builder.py will refuse to produce output if validation fails.
 
 ## Presentation Rules
 
@@ -81,9 +92,9 @@ Rules:
 
 ### Success Format (when validation passes):
 
-Say ONLY: "✅ Validación OK — escribiendo reporte..." then proceed to Step 3.
+Say ONLY: "✅ Validación OK — escribiendo reporte..." then proceed to Step 4.
 
-After Step 3 completes, say ONLY: "✅ Reporte escrito."
+After Step 4 completes, say ONLY: "✅ Reporte escrito."
 
 ### Empty Format:
 
@@ -91,7 +102,7 @@ Say ONLY: "No hay tasks para esta semana."
 
 ### Warnings (no errors but has warnings):
 
-Proceed to Step 3. Show warnings AFTER the write:
+Proceed to Step 4. Show warnings AFTER the write:
 ```
 Reporte escrito. ⚠️ 1 aviso:
 - **Productivity TEP** en [T277644569](https://www.internalfb.com/T277644569) — ratio 1.5, threshold <= 1.0.
@@ -105,5 +116,5 @@ If any script fails with "OAuth" or "401" or "auth" errors, tell the user:
 > 1. Abre https://www.internalfb.com/intern/jf/authenticate/
 > 2. Da click en "Generate new token"
 > 3. Copia URL
-> 4. Pegala en tu terminal y da enter
+> 4. Pégala en tu terminal y da enter
 > 5. Vuelve a correr /click2sync-weekly-report

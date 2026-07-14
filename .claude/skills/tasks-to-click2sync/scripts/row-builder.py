@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Builds C2CRow objects from tasks + PTO context. Reads tasks from stdin, outputs rows as JSON."""
+"""Builds C2CRow objects from tasks + PTO context. Reads tasks from stdin, outputs rows as JSON.
+Runs internal validation before building — refuses to produce output if validation fails.
+Supports --week=current|previous|YYYY-MM-DD."""
 
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 
 SKILLS_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 
 pto_reader = import_module("pto-reader")
+validator = import_module("validate-tasks")
 
 TYPE_MAP = {
     "Test Plan": ("Test Planning", "Test Plan"),
@@ -43,7 +47,6 @@ ESTIMATION_LINKS = {
     "Test Execution & Reporting": "https://onesofttek.sharepoint.com/:f:/r/sites/SKPmetap/qanstt/Shared%20Documents/Project%20Tracking/Quality%20Tools/Estimations?csf=1&web=1&e=MWJjR3",
 }
 
-# ─── Fields that MUST be integers (keep in sync with validate-tasks.py) ───
 INT_FIELDS = [
     "Products",
     "TC Pass",
@@ -55,11 +58,36 @@ INT_FIELDS = [
     "Qty New Bugs Found",
 ]
 
-# ─── Fields that allow decimals ───
 DECIMAL_FIELDS = [
     "Effort",
     "Peer Review Scheduled Effort",
 ]
+
+
+def parse_week_arg(args):
+    """Parse --week argument. Returns the Monday of the target week."""
+    week_value = "current"
+    for arg in args:
+        if arg.startswith("--week="):
+            week_value = arg.split("=", 1)[1]
+
+    today = datetime.now()
+    current_monday = (today - timedelta(days=today.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    if week_value == "current":
+        return current_monday
+    elif week_value == "previous":
+        return current_monday - timedelta(days=7)
+    else:
+        try:
+            target = datetime.strptime(week_value, "%Y-%m-%d")
+            target_monday = target - timedelta(days=target.weekday())
+            return target_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            print(f"Error: Invalid --week value: {week_value}.", file=sys.stderr)
+            sys.exit(1)
 
 
 def load_config():
@@ -96,6 +124,26 @@ def safe_num_str(value):
         return str(val)
     except (ValueError, TypeError):
         return ""
+
+
+def run_validation(tasks, monday, config):
+    """Run validation internally. Returns True if passed, False if failed."""
+    week_context = None
+    if config.get("softtek_pto_name"):
+        week_context = pto_reader.get_week_context(config["softtek_pto_name"], monday)
+
+    has_errors = False
+    for task in tasks:
+        task_errors, _ = validator.validate_task(task)
+        if task_errors:
+            has_errors = True
+
+    if week_context:
+        calendar_errors, _, _ = validator.validate_against_calendar(tasks, week_context)
+        if calendar_errors:
+            has_errors = True
+
+    return not has_errors
 
 
 def build_rows(tasks, config, week_context):
@@ -204,13 +252,19 @@ def build_rows(tasks, config, week_context):
 
 def main():
     config = load_config()
+    monday = parse_week_arg(sys.argv[1:])
     tasks = json.loads(sys.stdin.read())
 
     if not tasks:
         print("[]")
         return
 
-    week_context = pto_reader.get_week_context(config["softtek_pto_name"])
+    # Internal validation gate — structurally prevents writing invalid data
+    if not run_validation(tasks, monday, config):
+        print("Error: Validation failed. Cannot build rows.", file=sys.stderr)
+        sys.exit(1)
+
+    week_context = pto_reader.get_week_context(config["softtek_pto_name"], monday)
     rows = build_rows(tasks, config, week_context)
     print(json.dumps(rows))
 

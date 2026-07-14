@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Writes C2CRow data as JSON to the Shared Drive.
 Each person has their own file: Click2Sync/{Name}.json
-Each week is stored as a key in the JSON. No concurrency conflicts."""
+Each week is stored as a key in the JSON. No concurrency conflicts.
+Supports --week=current|previous|YYYY-MM-DD."""
 
 import json
 import os
@@ -17,9 +18,34 @@ SKILLS_DIR = os.path.dirname(SKILL_DIR)
 CONFIG_PATH = os.path.join(SKILLS_DIR, "config.json")
 
 
-def get_week_tab_name():
+def parse_week_arg(args):
+    """Parse --week argument. Returns the Monday of the target week."""
+    week_value = "current"
+    for arg in args:
+        if arg.startswith("--week="):
+            week_value = arg.split("=", 1)[1]
+
     today = datetime.now()
-    monday = today - timedelta(days=today.weekday())
+    current_monday = (today - timedelta(days=today.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    if week_value == "current":
+        return current_monday
+    elif week_value == "previous":
+        return current_monday - timedelta(days=7)
+    else:
+        try:
+            target = datetime.strptime(week_value, "%Y-%m-%d")
+            target_monday = target - timedelta(days=target.weekday())
+            return target_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            print(f"Error: Invalid --week value: {week_value}.", file=sys.stderr)
+            sys.exit(1)
+
+
+def get_week_tab_name(monday):
+    """Generate tab name from a Monday date. E.g. 'Jul 7-13'."""
     sunday = monday + timedelta(days=6)
     return f"{monday.strftime('%b')} {monday.day}-{sunday.day}"
 
@@ -69,8 +95,9 @@ def main():
         print("No rows to write.")
         return
 
+    monday = parse_week_arg(sys.argv[1:])
     json_path = get_json_path(config)
-    tab_name = get_week_tab_name()
+    tab_name = get_week_tab_name(monday)
     person_name = config["softtek_pto_name"]
     username = config["softtek_username"]
     meta_unixname = config.get("meta_unixname", "")
@@ -79,7 +106,6 @@ def main():
     if json_path.exists():
         with open(json_path, "r") as f:
             data = json.load(f)
-        # Ensure meta_unixname is present (update old files)
         if "meta_unixname" not in data or not data["meta_unixname"]:
             data["meta_unixname"] = meta_unixname
     else:
@@ -90,7 +116,7 @@ def main():
             "weeks": {},
         }
 
-    # Replace current week's rows (always overwrite with latest)
+    # Replace target week's rows (always overwrite with latest)
     data["weeks"][tab_name] = rows
 
     # Write to temp file first, then copy to Drive
@@ -102,7 +128,7 @@ def main():
     shutil.copy2(str(tmp_path), str(json_path))
     tmp_path.unlink(missing_ok=True)
 
-    print(json.dumps({"status": "ok"}))
+    print(json.dumps({"status": "ok", "week": tab_name}))
 
 
 if __name__ == "__main__":

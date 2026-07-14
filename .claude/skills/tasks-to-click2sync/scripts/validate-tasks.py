@@ -4,6 +4,8 @@ Two-layer validation:
   Layer 1: Per-row field validation
   Layer 2: Cross-row PTO calendar validation (effort sum)
 
+Supports --week=current|previous|YYYY-MM-DD for PTO context.
+
 EXIT CODES:
   0 = validation passed (no errors)
   1 = validation failed (errors found — DO NOT proceed to write)
@@ -74,7 +76,7 @@ VALID_ACTIONS = {
 
 PEER_REVIEW_SUBTYPES = ["Test Case", "Test Script"]
 
-# ─── Fields that MUST be integers (add/remove as needed) ───
+# Fields that MUST be integers
 INT_FIELDS = [
     "Products",
     "TC Pass",
@@ -86,11 +88,37 @@ INT_FIELDS = [
     "Qty New Bugs Found",
 ]
 
-# ─── Fields that allow decimals ───
+# Fields that allow decimals
 DECIMAL_FIELDS = [
     "Effort",
     "Peer Review Scheduled Effort",
 ]
+
+
+def parse_week_arg(args):
+    """Parse --week argument. Returns the Monday of the target week."""
+    week_value = "current"
+    for arg in args:
+        if arg.startswith("--week="):
+            week_value = arg.split("=", 1)[1]
+
+    today = datetime.now()
+    current_monday = (today - timedelta(days=today.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    if week_value == "current":
+        return current_monday
+    elif week_value == "previous":
+        return current_monday - timedelta(days=7)
+    else:
+        try:
+            target = datetime.strptime(week_value, "%Y-%m-%d")
+            target_monday = target - timedelta(days=target.weekday())
+            return target_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            print(f"Error: Invalid --week value: {week_value}.", file=sys.stderr)
+            sys.exit(1)
 
 
 def safe_num(value, default=0):
@@ -110,13 +138,13 @@ def safe_int(value, default=0):
 
 
 def check_int_field(dk, field_name):
-    """Check if an INT_FIELD has a non-integer decimal value. Returns error dict or None."""
+    """Check if an INT_FIELD has a non-integer decimal value."""
     raw = str(dk.get(field_name, "")).strip()
     if not raw:
         return None
     try:
         val = float(raw)
-        if val != int(val):  # 2.5 != 2 -> error. 2.0 == 2 -> OK
+        if val != int(val):
             return {
                 "field": field_name,
                 "value": raw,
@@ -141,24 +169,24 @@ def validate_task(task):
     module = task.get("module", "")
     team = task.get("team", "")
 
-    # ── Structure validation (title) ──
+    # Structure validation (title)
     if not module or not team:
         errors.append(
             {
                 "field": "Title",
                 "value": "Bad format",
-                "expected": "[STK]_[Product]_[Team]_[Activity]: Description",
+                "expected": "[STK]_[Team]_[Module]_[Activity]: Description",
             }
         )
         return errors, warnings
 
-    # ── Type validation ──
+    # Type validation
     if not category:
         errors.append(
             {
                 "field": "Type",
                 "value": "Missing",
-                "expected": "Add [Type]: <value> in description",
+                "expected": "Add [Type]:  in description",
             }
         )
     elif category not in TYPE_MAP:
@@ -180,14 +208,14 @@ def validate_task(task):
     is_design = req_type == "Test Design"
     is_design_with_peer = is_design and req_subtype in PEER_REVIEW_SUBTYPES
 
-    # ── Check INT_FIELDS for non-integer decimals ──
+    # Check INT_FIELDS for non-integer decimals
     for field_name in INT_FIELDS:
         if field_name in dk:
             int_err = check_int_field(dk, field_name)
             if int_err:
                 errors.append(int_err)
 
-    # ── Data validation ──
+    # Data validation
     effort = safe_num(dk.get("Effort"))
     products = safe_int(dk.get("Products"))
     action = dk.get("Action", "").strip() or "NA"
@@ -249,7 +277,7 @@ def validate_task(task):
             errors.append(
                 {
                     "field": "TC Fields",
-                    "value": f"Missing: {', '.join(missing)}",
+                    "value": f"Missing: {\', \'.join(missing)}",
                     "expected": "Add [TC Pass], [TC Fail], [TC Blocked]",
                 }
             )
@@ -268,13 +296,13 @@ def validate_task(task):
     if tc_fail > 0 and qty_new_bugs <= 0 and qty_bugs_closed <= 0:
         errors.append(
             {
-                "field": "Bugs",
-                "value": f"Fail={tc_fail}, no bugs",
+                "field": "Bug Counts",
+                "value": f"Fail={tc_fail}, no bugs reported",
                 "expected": "Add [Qty New Bugs Found] or [Qty Bugs Closed]",
             }
         )
 
-    # ── Productivity warnings ──
+    # Productivity warnings
     if req_subtype in ("Test Case Execution", "Adhoc Testing") and total > 0:
         ratio = effort / total
         if ratio > 1:
@@ -371,7 +399,7 @@ def validate_against_calendar(tasks, week_context):
 
 
 # =============================================================================
-# MAIN — JSON output
+# MAIN
 # =============================================================================
 
 
@@ -385,8 +413,7 @@ def main():
 
     tasks = json.loads(raw)
 
-    today = datetime.now()
-    monday = today - timedelta(days=today.weekday())
+    monday = parse_week_arg(sys.argv[1:])
     sunday = monday + timedelta(days=6)
     week_str = f"{monday.strftime('%b %d')} - {sunday.strftime('%b %d, %Y')}"
 
@@ -397,7 +424,7 @@ def main():
 
     week_context = None
     if config.get("softtek_pto_name"):
-        week_context = pto_reader.get_week_context(config["softtek_pto_name"])
+        week_context = pto_reader.get_week_context(config["softtek_pto_name"], monday)
 
     # Layer 1
     task_results = []

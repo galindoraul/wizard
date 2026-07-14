@@ -80,13 +80,13 @@ def build_url(ts_start, ts_end, config):
 
 
 def parse_title(title):
-    """Parse title format: [STK]_[Product]_[Team]_[Activity]: Description"""
+    """Parse title format: [STK]_[Team]_[Module]_[Activity]: Description"""
     match = re.match(r"^\[STK\]_\[([^\]]+)\]_\[([^\]]+)\]_\[([^\]]+)\]:\s*(.+)$", title)
     if not match:
         return {"module": "", "team": "", "activity": "", "shortDescription": title}
     return {
-        "module": match.group(1).strip(),
-        "team": match.group(2).strip(),
+        "team": match.group(1).strip(),
+        "module": match.group(2).strip(),
         "activity": match.group(3).strip(),
         "shortDescription": match.group(4).strip(),
     }
