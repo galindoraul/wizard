@@ -1,0 +1,1 @@
+# Weekly Hours Python package
