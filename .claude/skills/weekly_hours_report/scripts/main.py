@@ -3,11 +3,7 @@
 import argparse
 from pathlib import Path
 from datetime import datetime
-from read_pto import read_pto
-from read_team import read_team
-from build_report import build_report
-from export_excel import export_excel
-from fetch_sheet import fetch_sheet, DEFAULT_SHEET_ID
+from core import fetch_sheet, read_pto, read_team, build_report, export_excel, DEFAULT_SHEET_ID
 
 # Reports are delivered to this Shared drive folder via the locally-synced Google
 # Drive for Desktop mount — the CLI upload API is blocked by corpnet on laptops.

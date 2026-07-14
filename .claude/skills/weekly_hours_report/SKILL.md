@@ -59,14 +59,16 @@ If it lists tabs, you're good. If it fails with OAuth / 401 / auth errors, see
 
 ## How it runs (`scripts/main.py`)
 
-1. **Fetch** — `fetch_sheet.py` pulls the "Team allocation 2026" tab and the
+All the logic lives in `scripts/core.py`; `main.py` is just the CLI entry point.
+
+1. **Fetch** — `fetch_sheet()` pulls the "Team allocation 2026" tab and the
    month's PTO tab via `meta google.sheets read` (concurrently), and writes a
    local copy to `scripts/cache/sheet-{Month}-{Year}.xlsx`. Reuses the cache when
    possible — see [Caching & performance](#caching--performance).
-2. **Read PTO** — `read_pto.py` parses the monthly tab (absences + holidays + backups).
-3. **Read Team** — `read_team.py` parses "Team allocation 2026" (roles, products, QA grouping).
-4. **Build** — `build_report.py` combines PTO + team into Q1/Q2/Q3 structures.
-5. **Export** — `export_excel.py` writes the formatted, color-coded workbook.
+2. **Read PTO** — `read_pto()` parses the monthly tab (absences + holidays + backups).
+3. **Read Team** — `read_team()` parses "Team allocation 2026" (roles, products, QA grouping).
+4. **Build** — `build_report()` combines PTO + team into Q1/Q2/Q3 structures.
+5. **Export** — `export_excel()` writes the formatted, color-coded workbook.
 
 > All **input data** (collaborators, absences, backups) comes from the single
 > Google Sheet below — no other source is read. The finished report is then
@@ -78,7 +80,7 @@ If it lists tabs, you're good. If it fails with OAuth / 401 / auth errors, see
 |------|---------|
 | `--month` | Month name (Jan–Dec). Default: current month. |
 | `--year` | Year. Default: current year. |
-| `--sheet-id <id>` | Override the Google Sheet ID (default baked into `fetch_sheet.py`). |
+| `--sheet-id <id>` | Override the Google Sheet ID (default baked into `core.py`). |
 | `--sheet-xlsx <path>` | Reuse an already-downloaded Sheet copy instead of downloading again. |
 | `--no-cache` | Force a fresh download even if a valid cache exists. |
 | `--output <path>` | Override the output `.xlsx` path. |
@@ -86,7 +88,7 @@ If it lists tabs, you're good. If it fails with OAuth / 401 / auth errors, see
 ### Caching & performance
 
 ~95% of a run is network time on `meta google.sheets`. To keep reruns fast,
-`fetch_sheet.py`:
+`fetch_sheet()` (in `core.py`):
 
 - Reads the **team tab and month tab concurrently** (one round-trip's worth of
   wall-clock instead of two).
