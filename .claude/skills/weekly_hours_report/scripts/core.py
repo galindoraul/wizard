@@ -285,25 +285,39 @@ COLS = {
     "qa_3": "New QA3",
 }
 
+def _parse_team_rows(rows):
+    """Parse the "Team allocation 2026" 2D cell rows into collaborator dicts."""
+    if not rows: return []
+    header = {}
+    for i, h in enumerate(rows[0]):
+        if h not in (None, ""): header[str(h).strip()] = i
+    out = []
+    for r in rows[1:]:
+        def get(name):
+            i = header.get(name)
+            return str(r[i]).strip() if (i is not None and i < len(r) and r[i] not in (None, "")) else ""
+        short = get(COLS["short_name"])
+        if not short: continue
+        rec = {field: get(h) for field, h in COLS.items()}
+        # fields absent from the new Sheet, kept empty for downstream compatibility
+        rec.update({"wave":"","meta_username":"","meta_tag":"","rate":"","softtek_username":""})
+        out.append(rec)
+    return out
+
 def read_team(team_path=None):
     if not team_path:
         raise ValueError("team_path (local xlsx fetched from the Google Sheet) is required")
     p = Path(team_path)
     if not p.exists(): raise FileNotFoundError(f"Team file not found at {p}")
-    wb=load_workbook(p,data_only=True); ws=wb[TEAM_TAB]; headers={}
-    for col in range(1,ws.max_column+1):
-        v=ws.cell(TEAM_HEADER_ROW,col).value
-        if v: headers[str(v).strip()]=col
-    out=[]
-    for r in range(TEAM_HEADER_ROW+1,ws.max_row+1):
-        def get(h): c=headers.get(h); return str(ws.cell(r,c).value or "").strip() if c else ""
-        short=get(COLS["short_name"])
-        if not short: continue
-        rec={field:get(h) for field,h in COLS.items()}
-        # fields absent from the new Sheet, kept empty for downstream compatibility
-        rec.update({"wave":"","meta_username":"","meta_tag":"","rate":"","softtek_username":""})
-        out.append(rec)
-    return out
+    wb = load_workbook(p, data_only=True); ws = wb[TEAM_TAB]
+    rows = [[c.value for c in row] for row in ws.iter_rows(min_row=1, max_row=ws.max_row, max_col=ws.max_column)]
+    return _parse_team_rows(rows)
+
+def fetch_team_roster(sheet_id=None):
+    """Read just the "Team allocation 2026" tab (one network call) → collaborator list.
+    Used to validate rates before a month is known."""
+    rows = _read_tab(sheet_id or DEFAULT_SHEET_ID, TEAM_TAB, TEAM_RANGE)
+    return _parse_team_rows(rows)
 
 
 # ===========================================================================
@@ -533,7 +547,8 @@ def section_color(col, week_count, weeks_detail_cols):
     if col<=gold_end+2: return GREEN
     return PURPLE
 
-def export_excel(data, output_path: Path):
+def write_weekly_sheet(wb, data, title="Weekly Hours"):
+    """Add a formatted 'Weekly Hours' worksheet to an existing workbook."""
     employees=[]
     for label, lst in [("Q1",data["q1"]),("Q2",data["q2"]),("Q3",data["q3"])]:
         if lst:
@@ -541,7 +556,7 @@ def export_excel(data, output_path: Path):
             employees.extend(lst)
     first = next((e for e in employees if not e.get("isSeparator")), None)
     if not first:
-        print("No data"); return
+        print("No weekly data"); return None
     week_count=len(first["weekHours"])
     weeks_detail = first.get("weekDetails",[])
     weeks_detail_cols = sum(len(w["days"])+1 for w in weeks_detail)
@@ -549,7 +564,7 @@ def export_excel(data, output_path: Path):
     abs_col = 6 + week_count + weeks_detail_cols
     comments_col = abs_col + 2
 
-    wb=Workbook(); ws=wb.active; ws.title="Weekly Hours"
+    ws=wb.create_sheet(title)
     widths=[25,10,10,15,15]
     for w in weeks_detail:
         widths.append(12)
@@ -638,6 +653,13 @@ def export_excel(data, output_path: Path):
         cell=ws.cell(row_idx,c); cell.fill=fill(TOTALS_GREEN); cell.border=border
 
     ws.freeze_panes="B3"
+    return ws
+
+def export_excel(data, output_path: Path):
+    """Standalone: write just the Weekly Hours sheet to its own workbook."""
+    wb=Workbook(); wb.remove(wb.active)
+    if write_weekly_sheet(wb, data) is None:
+        return
     output_path.parent.mkdir(parents=True,exist_ok=True)
     wb.save(output_path)
     print(f"Saved {output_path}")
