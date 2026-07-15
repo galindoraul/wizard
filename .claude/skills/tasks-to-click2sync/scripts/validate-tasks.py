@@ -277,7 +277,7 @@ def validate_task(task):
             errors.append(
                 {
                     "field": "TC Fields",
-                    "value": f"Missing: {\', \'.join(missing)}",
+                    "value": f"Missing: {', '.join(missing)}",
                     "expected": "Add [TC Pass], [TC Fail], [TC Blocked]",
                 }
             )
