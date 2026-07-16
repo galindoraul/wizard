@@ -180,13 +180,35 @@ def validate_task(task):
         )
         return errors, warnings
 
+    # Week validation (required field)
+    week_value = dk.get("Week", "").strip()
+    if not week_value:
+        errors.append(
+            {
+                "field": "Week",
+                "value": "Missing",
+                "expected": "Add [Week]: <number> in description",
+            }
+        )
+    else:
+        try:
+            int(week_value)
+        except ValueError:
+            errors.append(
+                {
+                    "field": "Week",
+                    "value": f'"{week_value}"',
+                    "expected": "Must be a number (ISO week)",
+                }
+            )
+
     # Type validation
     if not category:
         errors.append(
             {
                 "field": "Type",
                 "value": "Missing",
-                "expected": "Add [Type]:  in description",
+                "expected": "Add [Type]: <value> in description",
             }
         )
     elif category not in TYPE_MAP:
