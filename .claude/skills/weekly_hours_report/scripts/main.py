@@ -121,9 +121,9 @@ def main():
     wb = load_workbook(TEMPLATE_PATH)              # the invoice comes pre-formatted from the template
     invoice_ws = wb[wb.sheetnames[0]]
     invoice_ws.title = "Invoice"
-    work_refs = write_weekly_sheet(wb, weekly)    # add the Weekly Hours tab; returns Work Hrs cell refs
+    work_refs, tag_refs = write_weekly_sheet(wb, weekly)  # add Weekly Hours tab; returns Work Hrs + Tag cell refs
     wb.move_sheet("Weekly Hours", offset=-1)       # show Weekly Hours as the first tab
-    write_invoice_sheet(invoice_ws, billing, month, year, work_refs=work_refs)
+    write_invoice_sheet(invoice_ws, billing, month, year, work_refs=work_refs, tag_refs=tag_refs)
 
     out_path = resolve_output_path(month, year, args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

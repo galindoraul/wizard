@@ -82,9 +82,9 @@ The Sheet has **no rate column**, so rates live in a local JSON:
 5. **Billing** — `build_billing()` → line items, 2% discount, total.
 6. **Export** — the invoice **template** (`assets/Monthly Billing Report -
    Template.xlsx`) is loaded as the workbook; `write_weekly_sheet()` adds the
-   Weekly Hours tab (returning each collaborator's Work Hrs cell) and
+   Weekly Hours tab (returning each collaborator's Work Hrs **and Tag** cell) and
    `write_invoice_sheet()` fills the template's Invoice tab in place (line items +
-   totals), using that map for [live formulas](#live-links).
+   totals), using those maps for [live formulas](#live-links).
 
 > All **input** comes from the Sheet below (rates from local `rates.json`); the
 > finished workbook is *written* to Google Drive. Every run downloads fresh.
@@ -109,7 +109,8 @@ abbreviations** (`Jul 2026`), never Spanish (no "Julio 2026").
 **PTO — monthly tab** `{Month} {Year}` (Sep also matches `Sept 2026`):
 - **Row 8** = header `QA3 | Collab | <day #s…> | Backup | Notes`.
 - **Row 9+** = one row per collaborator; the **Collab** column is the match key.
-- Codes: `PTO`, `PTO(PA)`, `ML`, `ML(PA)`, `H` (holiday), `Bench`.
+- Codes: `PTO`, `PTO(PA)`, `ML`, `ML(PA)`, `H` (holiday), `Bench`, `O` (out of
+  project — gray).
 
 **Collaborators — "Team allocation 2026"** (header on **row 1**):
 
@@ -130,15 +131,18 @@ abbreviations** (`Jul 2026`), never Spanish (no "Julio 2026").
 - Standard day = **8h**; only **Mon–Fri** count.
 - **Holidays** (`H`) count as neither worked nor absence.
 - **Bench** (`TEAM: Bench | Bench <range>` note) subtracts worked hours, not absence.
-- **Backups** (`↳` rows) credited only on the covered person's **actual PTO/ML days**;
-  a backup day that's weekend/holiday/bench is **skipped** with a `WARN`. Billed at
-  the covered person's rate.
+- **Out of project** (`O`, gray) — the collaborator is off the project those days:
+  it subtracts worked hours (not absence), and — like PTO/ML — is a **coverable**
+  day, so a backup gets credited for covering it.
+- **Backups** (`↳` rows) credited only on the covered person's **coverable days**
+  (`PTO`/`ML`/`O`); a backup day that's weekend/holiday/bench is **skipped** with a
+  `WARN`. Billed at the covered person's rate.
 - **Emergency** red highlight when a collaborator's absence hours exceed 80.
 
 ### Expected warnings (not errors)
 
 - `WARN <name> not in team allocation, skipping` — in PTO but not team tab.
-- `WARN <name>: backup <person> on day <n> without PTO/ML, skipping that day`.
+- `WARN <name>: backup <person> on day <n> without PTO/ML/O, skipping that day`.
 - `WARN no rate for <name>` — shouldn't happen after `--check-rates` passes.
 
 ## Output
@@ -163,7 +167,7 @@ are **color-coded by group** with white text — identity (1-5) **navy** | each 
 block **gold** | Abs+Work **green** | Comments+Tag **purple** — and **dark divider
 lines** frame those same groups on top of the colors (light-gray gridlines
 inside). Cell colors: PTO blue, PTO(PA)/ML yellow, Holiday purple, Bench gray,
-Emergency red, Backup cream, Totals green.
+Out-of-project (`O`) gray, Emergency red, Backup cream, Totals green.
 
 **Invoice tab:** built by **filling the template** `assets/Monthly Billing Report -
 Template.xlsx` (bill/ship to, PO, footer and styling all come from it). Only the
@@ -172,8 +176,9 @@ DATE (**centered** in `I8:L8`), the **Services Period** line in `C18`
 line items (QTY × RATE = AMOUNT, one inserted row per collaborator under each
 section marker, then a **blank spacer row after each QA section** so they aren't
 cramped) and the totals — sub-total, 2% discount, total (+ amount in words) — are
-written in. Everything written uses **Times New Roman** and collaborator names are
-**not bold**.
+written in. The line-item **DESCRIPTION** (column C) is a **live link** to the
+collaborator's Tag cell in Weekly Hours (not static text). Everything written uses
+**Times New Roman** and collaborator names are **not bold**.
 
 ### Live links
 
@@ -184,6 +189,10 @@ Weekly Hours flows into the Invoice **without re-running the skill**:
   cell recalculates that collaborator's Work Hrs.
 - **QTY** (Invoice) = `='Weekly Hours'!<cell>` → that same collaborator's **Work
   Hrs** cell, so the change lands on the matching Invoice line.
+- **DESCRIPTION** (Invoice, column C) = `='Weekly Hours'!<cell>` → that
+  collaborator's **Tag** cell, so editing the Tag in Weekly Hours updates the
+  invoice name/label too. The column letter is computed per month (it shifts with
+  the number of day columns), never hard-coded.
 - **AMOUNT** = `QTY × RATE`; **SUB-TOTAL** = `SUM(amounts)`;
   **Discount** = `SUB-TOTAL × 2%`; **TOTAL** = `SUB-TOTAL − Discount`.
 

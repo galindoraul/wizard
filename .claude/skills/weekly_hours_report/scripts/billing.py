@@ -227,7 +227,7 @@ def _clear_row(ws, row):
         c.border = Border()
         c.fill = PatternFill()
 
-def _write_employee_row(ws, row, emp, work_refs):
+def _write_employee_row(ws, row, emp, work_refs, tag_refs):
     """Fill one line item (QTY / UN / DESCRIPTION / RATE / AMOUNT) at `row`.
 
     Everything is typed in Times New Roman; collaborator names are NOT bolded.
@@ -242,8 +242,11 @@ def _write_employee_row(ws, row, emp, work_refs):
     unit = ws.cell(row, UNIT_COL); unit.value = emp["unit"]; _tnr(unit)  # "Hrs"
 
     name = emp["fullName"].lstrip("↳ ").strip()
+    # DESCRIPTION: live link to the Weekly Hours "Tag" cell when available, so an edit
+    # to a collaborator's Tag flows into the invoice; else the static "Name - Product - Pilar".
+    tag_ref = tag_refs.get(id(emp.get("_emp")))
     desc = ws.cell(row, DESC_COL)
-    desc.value = f"{name} - {emp['product']} - {emp['pilar']}"
+    desc.value = f"={tag_ref}" if tag_ref else f"{name} - {emp['product']} - {emp['pilar']}"
     _tnr(desc, bold=False)  # collaborators never bold
     if emp["isBackup"]:
         desc.alignment = Alignment(indent=1, horizontal=desc.alignment.horizontal,
@@ -275,7 +278,7 @@ def _write_totals(ws, billing, amount_rows):
         tc = ws.cell(tot, AMOUNT_COL_END)
         tc.value = f"=L{st}-L{disc}"; tc.number_format = "#,##0.00"; _tnr(tc)
 
-def write_invoice_sheet(ws, billing, month, year, work_refs=None):
+def write_invoice_sheet(ws, billing, month, year, work_refs=None, tag_refs=None):
     """Fill the Monthly Billing template's invoice sheet with the QA line items.
 
     ``ws`` is the template sheet (already loaded into the combined workbook and
@@ -290,6 +293,7 @@ def write_invoice_sheet(ws, billing, month, year, work_refs=None):
     the Weekly Hours tab flows straight into the invoice without re-running.
     """
     work_refs = work_refs or {}
+    tag_refs = tag_refs or {}
     month_num = get_month_number(month)
     last_day = calendar.monthrange(year, month_num)[1]
 
@@ -321,7 +325,7 @@ def write_invoice_sheet(ws, billing, month, year, work_refs=None):
         employees = billing[role_key]
         for i, emp in enumerate(employees):
             row = marker_row + 1 + i
-            _write_employee_row(ws, row, emp, work_refs)
+            _write_employee_row(ws, row, emp, work_refs, tag_refs)
             amount_rows.append(row)
         _clear_row(ws, marker_row + 1 + len(employees))  # blank spacer after the section
     amount_rows.sort()

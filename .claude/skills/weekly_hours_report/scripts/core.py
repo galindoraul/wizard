@@ -270,6 +270,11 @@ def fetch_team_roster(sheet_id=None):
 # Build report — combine PTO + team into Q1/Q2/Q3 structures
 # ===========================================================================
 ABSENCE_TYPES = {"pto","pto(pa)","ml","ml(pa)"}
+# "O" (gray) = collaborator is OUTSIDE the project those days. It's not a PTO/ML
+# absence, but it IS coverable: a backup credited on the covered person's "O" days
+# (billed at that person's rate), just like a real PTO/ML day.
+OUT_TYPES = {"o"}
+COVERABLE_TYPES = ABSENCE_TYPES | OUT_TYPES
 
 def parse_backups(text):
     if not text.strip():
@@ -380,24 +385,24 @@ def build_report(pto_data, team_data, month, year):
             w=weekly.get(wn)
             if w: w["totalWorkedHours"]-=8; bench_hrs+=8
         backup_ranges=parse_backups(data["backupsText"])
-        absence_days_set={a["dayNumber"] for a in data["absences"] if normalize_value(a["type"]) in ABSENCE_TYPES}
-        # A backup covers real absence days only. Ranges may span weekends/holidays
-        # (e.g. "2-6" over a holiday on the 3rd) — those days aren't worked, so warn
-        # on any unexpected weekday but never credit or crash on them.
+        absence_days_set={a["dayNumber"] for a in data["absences"] if normalize_value(a["type"]) in COVERABLE_TYPES}
+        # A backup covers the person's coverable days only (PTO/ML or "O" out-of-project).
+        # Ranges may span weekends/holidays (e.g. "2-6" over a holiday on the 3rd) — those
+        # days aren't worked, so warn on any unexpected weekday but never credit or crash on them.
         for br in backup_ranges:
             for day in range(br["startDay"], br["endDay"]+1):
                 try: d=date(year,month_num,day)
                 except: continue
                 if d.weekday()>=5 or day in holiday_days: continue
                 if day not in absence_days_set:
-                    print(f"WARN {emp['short_name']}: backup {br['originalBackupName']} on day {day} without PTO/ML, skipping that day")
+                    print(f"WARN {emp['short_name']}: backup {br['originalBackupName']} on day {day} without PTO/ML/O, skipping that day")
         bc={}
         for br in backup_ranges:
             be=master.get(br["backupName"])
             if not be:
                 print(f"WARN backup {br['originalBackupName']} not found, skipping"); continue
             for day in range(br["startDay"], br["endDay"]+1):
-                if day not in absence_days_set: continue  # only cover real PTO/ML days (excludes weekends & holidays)
+                if day not in absence_days_set: continue  # only cover PTO/ML/O days (excludes weekends & holidays)
                 try: d=date(year,month_num,day)
                 except: continue
                 if d.weekday()>=5: continue
@@ -428,6 +433,8 @@ def build_report(pto_data, team_data, month, year):
                     days.append({"dayNumber":dn,"dayName":get_day_name(d),"status":"H","hours":0})
                 elif nt in ABSENCE_TYPES:
                     days.append({"dayNumber":dn,"dayName":get_day_name(d),"status":raw,"hours":0})
+                elif nt in OUT_TYPES:
+                    days.append({"dayNumber":dn,"dayName":get_day_name(d),"status":"O","hours":0})
                 else:
                     days.append({"dayNumber":dn,"dayName":get_day_name(d),"status":"","hours":0})
             meta=next((x for x in ctx["weeks"] if x["weekNumber"]==w["weekNumber"]),None)
@@ -570,7 +577,9 @@ def write_weekly_sheet(wb, data, title="Weekly Hours"):
         cell.fill=fill(sc); cell.font=header_font; cell.alignment=center; cell.border=make_border(i, bottom_dark=True)
 
     work_refs={}  # id(emp) -> "'Weekly Hours'!<col><row>" of its Work Hrs cell (for live Invoice references)
+    tag_refs={}   # id(emp) -> "'Weekly Hours'!<col><row>" of its Tag cell (for the Invoice DESCRIPTION formula)
     work_col_letter=get_column_letter(abs_col+1)
+    tag_col_letter=get_column_letter(comments_col+1)
     row_idx=3
     for emp in employees:
         if emp.get("isSeparator"):
@@ -596,6 +605,7 @@ def write_weekly_sheet(wb, data, title="Weekly Hours"):
                 elif st in ("PTO(PA)","ML","ML(PA)"): cell.fill=fill("FACC15"); cell.font=Font(color="000000")
                 elif st=="H": cell.fill=fill("F3E8FF"); cell.font=Font(color="A855F7")
                 elif st=="Bench": cell.fill=fill("E5E7EB"); cell.font=Font(color="6B7280")
+                elif st=="O": cell.fill=fill("D1D5DB"); cell.font=Font(color="4B5563")  # out-of-project (gray)
                 col+=1
             ws.cell(row_idx,col,hrs).alignment=center   # weekly Hrs (editable) column
             hrs_cells.append(f"{get_column_letter(col)}{row_idx}"); col+=1
@@ -607,6 +617,7 @@ def write_weekly_sheet(wb, data, title="Weekly Hours"):
         work_refs[id(emp)]=f"'{title}'!{work_col_letter}{row_idx}"
         ws.cell(row_idx,comments_col, emp["comments"]).alignment=wrap
         ws.cell(row_idx,comments_col+1, emp["tag"]).alignment=center
+        tag_refs[id(emp)]=f"'{title}'!{tag_col_letter}{row_idx}"
         for c in range(1,total_cols+1):
             cell=ws.cell(row_idx,c)
             cell.border=make_border(c)
@@ -634,7 +645,7 @@ def write_weekly_sheet(wb, data, title="Weekly Hours"):
         cell=ws.cell(row_idx,c); cell.fill=fill(TOTALS_GREEN); cell.border=make_border(c, top_dark=True, bottom_dark=True)
 
     ws.freeze_panes="B3"
-    return work_refs
+    return work_refs, tag_refs
 
 def export_excel(data, output_path: Path):
     """Standalone: write just the Weekly Hours sheet to its own workbook."""
