@@ -249,6 +249,7 @@ def validate_task(task):
     tc_blocked = safe_int(dk.get("TC Blocked"))
     total = tc_pass + tc_fail + tc_blocked
     qty_bugs_closed = safe_int(dk.get("Qty Bugs Closed"))
+    qty_bugs_verified = safe_int(dk.get("Qty Bugs Verified"))
     qty_new_bugs = safe_int(dk.get("Qty New Bugs Found"))
     peer_effort = safe_num(dk.get("Peer Review Scheduled Effort"))
 
@@ -318,12 +319,19 @@ def validate_task(task):
                 }
             )
 
-    if tc_fail > 0 and qty_new_bugs <= 0 and qty_bugs_closed <= 0:
+    # Bug accountability: if TC Fail > 0, at least one bug metric must be > 0
+    # (new bugs found, bugs closed, OR bugs verified)
+    if (
+        tc_fail > 0
+        and qty_new_bugs <= 0
+        and qty_bugs_closed <= 0
+        and qty_bugs_verified <= 0
+    ):
         errors.append(
             {
                 "field": "Bug Counts",
                 "value": f"Fail={tc_fail}, no bugs reported",
-                "expected": "Add [Qty New Bugs Found] or [Qty Bugs Closed]",
+                "expected": "Add [Qty New Bugs Found], [Qty Bugs Closed], or [Qty Bugs Verified]",
             }
         )
 
