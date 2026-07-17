@@ -18,7 +18,11 @@ mkdir -p "$WIZARD_DIR"
 
 clone_with_git() {
     if [ -d "$REPO_DIR/.git" ]; then
-        git -c http.https://github.com.sslVerify=false -c credential.helper= -C "$REPO_DIR" pull 2>/dev/null
+        # Try pull — if it fails (conflict, network, etc.), nuke and re-clone
+        if ! git -c http.https://github.com.sslVerify=false -c credential.helper= -C "$REPO_DIR" pull 2>/dev/null; then
+            rm -rf "$REPO_DIR"
+            git -c http.https://github.com.sslVerify=false -c credential.helper= clone https://github.com/galindoraul/wizard.git "$REPO_DIR" 2>/dev/null
+        fi
     else
         git -c http.https://github.com.sslVerify=false -c credential.helper= clone https://github.com/galindoraul/wizard.git "$REPO_DIR" 2>/dev/null
     fi
