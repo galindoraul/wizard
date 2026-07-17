@@ -18,7 +18,6 @@ mkdir -p "$WIZARD_DIR"
 
 clone_with_git() {
     if [ -d "$REPO_DIR/.git" ]; then
-        # Try pull — if it fails (conflict, network, etc.), nuke and re-clone
         if ! git -c http.https://github.com.sslVerify=false -c credential.helper= -C "$REPO_DIR" pull 2>/dev/null; then
             rm -rf "$REPO_DIR"
             git -c http.https://github.com.sslVerify=false -c credential.helper= clone https://github.com/galindoraul/wizard.git "$REPO_DIR" 2>/dev/null
@@ -32,7 +31,6 @@ download_with_curl() {
     rm -rf "$REPO_DIR"
     mkdir -p "$REPO_DIR"
 
-    # Download manifest (auto-generated list of all files)
     local manifest
     manifest=$(curl -sL "$RAW_BASE/manifest.txt")
     if [ -z "$manifest" ]; then
@@ -40,7 +38,6 @@ download_with_curl() {
         return 1
     fi
 
-    # Download each file from manifest
     while IFS= read -r file; do
         [ -z "$file" ] && continue
         local dir=$(dirname "$REPO_DIR/$file")
@@ -55,6 +52,13 @@ if clone_with_git; then
 else
     echo "📥 Downloading files..."
     download_with_curl
+fi
+
+# Preserve config.json before cleaning
+CONFIG_BAK=""
+if [ -f "$CLAUDE_DIR/skills/config.json" ]; then
+    CONFIG_BAK="$WIZARD_DIR/config.json.bak"
+    cp "$CLAUDE_DIR/skills/config.json" "$CONFIG_BAK"
 fi
 
 # Clean old symlinks
@@ -89,6 +93,14 @@ process_repo() {
 
 echo "🔗 Installed:"
 process_repo "$REPO_DIR"
+
+# Restore config.json
+if [ -n "$CONFIG_BAK" ] && [ -f "$CONFIG_BAK" ]; then
+    mkdir -p "$CLAUDE_DIR/skills"
+    cp "$CONFIG_BAK" "$CLAUDE_DIR/skills/config.json"
+    rm -f "$CONFIG_BAK"
+    echo "   🔑 config.json restored"
+fi
 
 # Add wizard alias (auto-updates + ensures claude is installed)
 SHELL_RC="$HOME/.zshrc"
