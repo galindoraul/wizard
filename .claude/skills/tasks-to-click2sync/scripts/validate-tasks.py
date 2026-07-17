@@ -94,6 +94,9 @@ DECIMAL_FIELDS = [
     "Peer Review Scheduled Effort",
 ]
 
+# Tolerance for floating point comparison (avoids 0.3 < 0.30000000000000004)
+FLOAT_TOLERANCE = 0.001
+
 
 def parse_week_arg(args):
     """Parse --week argument. Returns the Monday of the target week."""
@@ -278,7 +281,7 @@ def validate_task(task):
                     "expected": f">= {min_peer:.2f} (10% of {effort})",
                 }
             )
-        elif peer_effort < min_peer:
+        elif peer_effort < min_peer - FLOAT_TOLERANCE:
             errors.append(
                 {
                     "field": "Peer Review",
