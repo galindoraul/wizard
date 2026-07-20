@@ -27,7 +27,7 @@ CONFIG_PATH = os.path.join(SKILLS_DIR, "config.json")
 #   3 = current + 3 previous
 # Change this value and push to enable multi-week processing for everyone.
 # ──────────────────────────────────────────────────────────────────────────────
-WEEKS_LOOKBACK = 1
+WEEKS_LOOKBACK = 0
 
 TEAM_TAG = {"title": "SOFTTEK-PQX-QA", "fbid": "1512046989630466"}
 EXCLUDE_TAGS = [

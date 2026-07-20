@@ -2,15 +2,15 @@
 """Validate tasks from stdin and print structured JSON report.
 Two-layer validation:
   Layer 1: Per-row field validation
-  Layer 2: Cross-row PTO calendar validation (effort sum)
+  Layer 2: Per-week PTO calendar validation (effort sum per week)
 
-Supports --week=current|previous|YYYY-MM-DD for PTO context.
+Groups errors by [Week] for clear presentation.
 
 EXIT CODES:
   0 = validation passed (no errors)
   1 = validation failed (errors found — DO NOT proceed to write)
 
-OUTPUT: JSON object with validation results for the agent to format.
+OUTPUT: JSON object with validation results grouped by week.
 """
 
 import json
@@ -76,7 +76,6 @@ VALID_ACTIONS = {
 
 PEER_REVIEW_SUBTYPES = ["Test Case", "Test Script"]
 
-# Fields that MUST be integers
 INT_FIELDS = [
     "Products",
     "TC Pass",
@@ -88,44 +87,34 @@ INT_FIELDS = [
     "Qty New Bugs Found",
 ]
 
-# Fields that allow decimals
 DECIMAL_FIELDS = [
     "Effort",
     "Peer Review Scheduled Effort",
 ]
 
-# Tolerance for floating point comparison (avoids 0.3 < 0.30000000000000004)
 FLOAT_TOLERANCE = 0.001
 
 
-def parse_week_arg(args):
-    """Parse --week argument. Returns the Monday of the target week."""
-    week_value = "current"
-    for arg in args:
-        if arg.startswith("--week="):
-            week_value = arg.split("=", 1)[1]
-
+def iso_week_to_monday(iso_week):
+    """Convert ISO week number to Monday date (current year)."""
     today = datetime.now()
-    current_monday = (today - timedelta(days=today.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    year = today.year
+    jan4 = datetime(year, 1, 4)
+    start_of_week1 = jan4 - timedelta(days=jan4.weekday())
+    monday = start_of_week1 + timedelta(weeks=iso_week - 1)
+    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    if week_value == "current":
-        return current_monday
-    elif week_value == "previous":
-        return current_monday - timedelta(days=7)
-    else:
-        try:
-            target = datetime.strptime(week_value, "%Y-%m-%d")
-            target_monday = target - timedelta(days=target.weekday())
-            return target_monday.replace(hour=0, minute=0, second=0, microsecond=0)
-        except ValueError:
-            print(f"Error: Invalid --week value: {week_value}.", file=sys.stderr)
-            sys.exit(1)
+
+def get_week_label(iso_week):
+    """Get human label: 'Semana 28 (Jul 07 - Jul 11)'."""
+    monday = iso_week_to_monday(iso_week)
+    friday = monday + timedelta(days=4)
+    return (
+        f"Semana {iso_week} ({monday.strftime('%b %d')} - {friday.strftime('%b %d')})"
+    )
 
 
 def safe_num(value, default=0):
-    """Parse as float. Use for decimal-allowed fields."""
     try:
         return float(value) if value else default
     except (ValueError, TypeError):
@@ -133,7 +122,6 @@ def safe_num(value, default=0):
 
 
 def safe_int(value, default=0):
-    """Parse as integer. Handles '2.0' -> 2. Use for INT_FIELDS."""
     try:
         return int(float(value)) if value else default
     except (ValueError, TypeError):
@@ -141,7 +129,6 @@ def safe_int(value, default=0):
 
 
 def check_int_field(dk, field_name):
-    """Check if an INT_FIELD has a non-integer decimal value."""
     raw = str(dk.get(field_name, "")).strip()
     if not raw:
         return None
@@ -319,8 +306,6 @@ def validate_task(task):
                 }
             )
 
-    # Bug accountability: if TC Fail > 0, at least one bug metric must be > 0
-    # (new bugs found, bugs closed, OR bugs verified)
     if (
         tc_fail > 0
         and qty_new_bugs <= 0
@@ -381,54 +366,84 @@ def validate_task(task):
 
 
 # =============================================================================
-# LAYER 2: Cross-row PTO calendar validation
+# LAYER 2: Per-week PTO calendar validation
 # =============================================================================
 
 
-def validate_against_calendar(tasks, week_context):
-    working_days = week_context["working_days"]
-    expected_hours = week_context["expected_hours"]
-
-    breakdown = []
-    total_effort = 0
-
+def validate_effort_per_week(tasks, config):
+    """Validate effort totals per week against PTO calendar."""
+    tasks_by_week = {}
     for task in tasks:
         dk = task.get("descriptionKeys", {})
-        category = task.get("category", "")
-        module = task.get("module", "")
-
-        if not module:
+        week_str = dk.get("Week", "").strip()
+        try:
+            week_num = int(week_str)
+        except (ValueError, TypeError):
             continue
-        mapping = TYPE_MAP.get(category)
-        if not mapping:
-            continue
-
-        effort = safe_num(dk.get("Effort"))
-        total_effort += effort
-
-        short_desc = task.get("shortDescription", "")
-        breakdown.append(
-            {
-                "taskId": task.get("id", "?"),
-                "label": f"{category}: {short_desc}",
-                "effort": effort,
-            }
-        )
+        if week_num not in tasks_by_week:
+            tasks_by_week[week_num] = []
+        tasks_by_week[week_num].append(task)
 
     calendar_errors = []
-    if total_effort != expected_hours and total_effort > 0:
-        diff = expected_hours - total_effort
-        calendar_errors.append(
-            {
-                "field": "Effort Total",
-                "actual": total_effort,
-                "expected": expected_hours,
-                "working_days": working_days,
-                "difference": diff,
-            }
-        )
+    effort_by_week = {}
 
-    return calendar_errors, breakdown, total_effort
+    softtek_pto_name = config.get("softtek_pto_name", "")
+    if not softtek_pto_name:
+        return calendar_errors, effort_by_week
+
+    for week_num, week_tasks in sorted(tasks_by_week.items()):
+        monday = iso_week_to_monday(week_num)
+        week_context = pto_reader.get_week_context(softtek_pto_name, monday)
+        expected_hours = week_context["expected_hours"]
+        working_days = week_context["working_days"]
+
+        total_effort = 0
+        task_breakdown = []
+        for task in week_tasks:
+            dk = task.get("descriptionKeys", {})
+            category = task.get("category", "")
+            mapping = TYPE_MAP.get(category)
+            if not mapping:
+                continue
+            effort = safe_num(dk.get("Effort"))
+            total_effort += effort
+            task_breakdown.append(
+                {
+                    "taskId": task.get("id", "?"),
+                    "effort": effort,
+                    "description": task.get("shortDescription", "")[:40],
+                }
+            )
+
+        effort_by_week[week_num] = {
+            "total": total_effort,
+            "expected": expected_hours,
+            "working_days": working_days,
+            "tasks": task_breakdown,
+        }
+
+        if total_effort != expected_hours and total_effort > 0:
+            diff = expected_hours - total_effort
+            excess = abs(diff)
+
+            # Mark suspicious tasks: effort >= excess (likely wrong [Week])
+            for t in task_breakdown:
+                t["suspicious"] = diff < 0 and t["effort"] >= excess
+
+            calendar_errors.append(
+                {
+                    "field": "Effort Total",
+                    "week": week_num,
+                    "weekLabel": get_week_label(week_num),
+                    "actual": total_effort,
+                    "expected": expected_hours,
+                    "working_days": working_days,
+                    "difference": diff,
+                    "tasks": task_breakdown,
+                }
+            )
+
+    return calendar_errors, effort_by_week
 
 
 # =============================================================================
@@ -439,76 +454,76 @@ def validate_against_calendar(tasks, week_context):
 def main():
     raw = sys.stdin.read().strip()
     if not raw or raw == "[]":
-        print(
-            json.dumps({"status": "empty", "message": "0 tasks found for this week."})
-        )
+        print(json.dumps({"status": "empty", "message": "0 tasks found."}))
         return
 
     tasks = json.loads(raw)
-
-    monday = parse_week_arg(sys.argv[1:])
-    sunday = monday + timedelta(days=6)
-    week_str = f"{monday.strftime('%b %d')} - {sunday.strftime('%b %d, %Y')}"
 
     config = {}
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
             config = json.load(f)
 
-    week_context = None
-    if config.get("softtek_pto_name"):
-        week_context = pto_reader.get_week_context(config["softtek_pto_name"], monday)
-
-    # Layer 1
+    # Layer 1: per-task validation
     task_results = []
     for task in tasks:
         task_errors, task_warnings = validate_task(task)
+        dk = task.get("descriptionKeys", {})
+        week_str = dk.get("Week", "").strip()
+        try:
+            display_week = int(week_str)
+        except (ValueError, TypeError):
+            display_week = task.get("createdWeek", datetime.now().isocalendar()[1])
+
         task_results.append(
             {
                 "taskId": task["id"],
                 "category": task["category"],
                 "shortDescription": task["shortDescription"],
+                "displayWeek": display_week,
                 "errors": task_errors,
                 "warnings": task_warnings,
             }
         )
 
-    # Layer 2
-    calendar_errors = []
-    breakdown = []
-    total_effort = 0
-    if week_context:
-        calendar_errors, breakdown, total_effort = validate_against_calendar(
-            tasks, week_context
-        )
+    # Layer 2: per-week calendar validation
+    calendar_errors, effort_by_week = validate_effort_per_week(tasks, config)
 
-    # Build report
+    # Group errors by week
     all_errors = [t for t in task_results if t["errors"]]
     all_warnings = [t for t in task_results if t["warnings"]]
     has_errors = bool(all_errors) or bool(calendar_errors)
 
+    errors_by_week = {}
+    for t in all_errors:
+        w = t["displayWeek"]
+        if w not in errors_by_week:
+            errors_by_week[w] = []
+        errors_by_week[w].append(t)
+
+    # Build week labels for all weeks that have errors
+    week_labels = {}
+    all_weeks = set(errors_by_week.keys())
+    for ce in calendar_errors:
+        all_weeks.add(ce["week"])
+    for w in all_weeks:
+        week_labels[str(w)] = get_week_label(w)
+
     report = {
         "status": "fail" if has_errors else "pass",
-        "week": week_str,
         "totalTasks": len(tasks),
         "errorCount": len(all_errors),
         "warningCount": len(all_warnings),
         "okCount": len(tasks) - len(all_errors) - len(all_warnings),
-        "pto": (
-            {
-                "workingDays": week_context["working_days"],
-                "expectedHours": week_context["expected_hours"],
-                "holidays": week_context.get("holiday_days", []),
-                "absences": week_context.get("absence_days", []),
-            }
-            if week_context
-            else None
-        ),
         "taskErrors": all_errors,
         "taskWarnings": all_warnings,
+        "errorsByWeek": {str(w): errors_by_week[w] for w in sorted(errors_by_week)},
+        "weekLabels": {
+            str(w): week_labels[str(w)]
+            for w in sorted(week_labels, key=lambda x: int(x))
+        },
         "calendarErrors": calendar_errors,
-        "effortBreakdown": breakdown,
-        "totalEffort": total_effort,
+        "effortByWeek": {str(w): effort_by_week[w] for w in sorted(effort_by_week)},
     }
 
     print(json.dumps(report))

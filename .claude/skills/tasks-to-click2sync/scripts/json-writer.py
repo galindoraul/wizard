@@ -1,53 +1,20 @@
 #!/usr/bin/env python3
 """Writes C2CRow data as JSON to the Shared Drive.
 Each person has their own file: Click2Sync/{Name}.json
-Each week is stored as a key in the JSON. No concurrency conflicts.
-Supports --week=current|previous|YYYY-MM-DD."""
+Receives rows grouped by week tab name and writes each to its tab.
+No concurrency conflicts."""
 
 import json
 import os
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timedelta
 from pathlib import Path
 
 SCRIPTS_DIR = os.path.dirname(os.path.realpath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPTS_DIR)
 SKILLS_DIR = os.path.dirname(SKILL_DIR)
 CONFIG_PATH = os.path.join(SKILLS_DIR, "config.json")
-
-
-def parse_week_arg(args):
-    """Parse --week argument. Returns the Monday of the target week."""
-    week_value = "current"
-    for arg in args:
-        if arg.startswith("--week="):
-            week_value = arg.split("=", 1)[1]
-
-    today = datetime.now()
-    current_monday = (today - timedelta(days=today.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-
-    if week_value == "current":
-        return current_monday
-    elif week_value == "previous":
-        return current_monday - timedelta(days=7)
-    else:
-        try:
-            target = datetime.strptime(week_value, "%Y-%m-%d")
-            target_monday = target - timedelta(days=target.weekday())
-            return target_monday.replace(hour=0, minute=0, second=0, microsecond=0)
-        except ValueError:
-            print(f"Error: Invalid --week value: {week_value}.", file=sys.stderr)
-            sys.exit(1)
-
-
-def get_week_tab_name(monday):
-    """Generate tab name from a Monday date. E.g. 'Jul 7-13'."""
-    sunday = monday + timedelta(days=6)
-    return f"{monday.strftime('%b')} {monday.day}-{sunday.day}"
 
 
 def get_json_path(config):
@@ -90,14 +57,13 @@ def main():
     with open(CONFIG_PATH) as f:
         config = json.load(f)
 
-    rows = json.loads(sys.stdin.read())
-    if not rows:
+    # Input is {tab_name: [rows], ...}
+    weeks_data = json.loads(sys.stdin.read())
+    if not weeks_data:
         print("No rows to write.")
         return
 
-    monday = parse_week_arg(sys.argv[1:])
     json_path = get_json_path(config)
-    tab_name = get_week_tab_name(monday)
     person_name = config["softtek_pto_name"]
     username = config["softtek_username"]
     meta_unixname = config.get("meta_unixname", "")
@@ -116,8 +82,11 @@ def main():
             "weeks": {},
         }
 
-    # Replace target week's rows (always overwrite with latest)
-    data["weeks"][tab_name] = rows
+    # Write each week's rows to its tab
+    weeks_written = []
+    for tab_name, rows in weeks_data.items():
+        data["weeks"][tab_name] = rows
+        weeks_written.append(tab_name)
 
     # Write to temp file first, then copy to Drive
     tmp_path = Path(tempfile.gettempdir()) / f"Click2Sync_{username}.json"
@@ -128,7 +97,7 @@ def main():
     shutil.copy2(str(tmp_path), str(json_path))
     tmp_path.unlink(missing_ok=True)
 
-    print(json.dumps({"status": "ok", "week": tab_name}))
+    print(json.dumps({"status": "ok", "weeksWritten": weeks_written}))
 
 
 if __name__ == "__main__":

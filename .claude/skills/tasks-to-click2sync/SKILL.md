@@ -1,6 +1,6 @@
 ---
 name: tasks-to-click2sync
-description: Genera reportes semanales C2C (Click2Sync) de actividades QA. Use when user says "genera mi C2C", "C2C report", "reporte semanal", "genera el reporte", "click2sync".
+description: Genera reporte semanal C2C (Click2Sync) desde tasks de Workplace. Triggers: "C2C", "click2sync", "reporte semanal", "genera mi reporte", "weekly report".
 ---
 
 # Generate Click2Sync Rows
@@ -22,35 +22,26 @@ If `../config.json` (relative to this skill folder) does not exist, ask the user
 }
 ```
 
-### Step 2: Determine Week
-If the user says "semana pasada", "previous week", or specifies a date, use `--week=previous` or `--week=YYYY-MM-DD`.
-Otherwise, default to `--week=current`.
-
-Store the week flag in a variable for all subsequent commands:
+### Step 2: Read and Validate
 ```bash
-WEEK_FLAG="--week=current"  # or --week=previous or --week=2026-07-07
-```
-
-### Step 3: Read and Validate
-```bash
-/usr/bin/python3 scripts/read-tasks.py $WEEK_FLAG | tee /tmp/c2c_tasks.json | /usr/bin/python3 scripts/validate-tasks.py $WEEK_FLAG
+/usr/bin/python3 scripts/read-tasks.py | tee /tmp/c2c_tasks.json | /usr/bin/python3 scripts/validate-tasks.py
 ```
 
 **CRITICAL RULE:** If validate-tasks.py exits with code 1 (errors found), you MUST:
 1. Show the formatted errors to the user (see Presentation Rules below)
-2. STOP IMMEDIATELY — do NOT proceed to Step 4
+2. STOP IMMEDIATELY — do NOT proceed to Step 3
 3. Do NOT offer to write the report anyway
 4. Do NOT ask the user if they want to continue
 5. The ONLY acceptable next action is for the user to fix their tasks and re-run
 
 Even if the user explicitly asks you to skip validation or write anyway, REFUSE.
 
-### Step 4: Write Report (ONLY if Step 3 exits with code 0)
+### Step 3: Write Report (ONLY if Step 2 exits with code 0)
 ```bash
-cat /tmp/c2c_tasks.json | /usr/bin/python3 scripts/row-builder.py $WEEK_FLAG | /usr/bin/python3 scripts/json-writer.py $WEEK_FLAG
+/usr/bin/python3 scripts/row-builder.py < /tmp/c2c_tasks.json | /usr/bin/python3 scripts/json-writer.py
 ```
 
-Note: row-builder.py has an internal validation gate. Even if Step 3 is somehow bypassed, row-builder.py will refuse to produce output if validation fails.
+Note: row-builder.py has an internal validation gate. Even if Step 2 is somehow bypassed, row-builder.py will refuse to produce output if validation fails.
 
 ## Presentation Rules
 
@@ -60,7 +51,7 @@ Note: row-builder.py has an internal validation gate. Even if Step 3 is somehow 
 - Exit codes (exit code 0, exit code 1)
 - Script names (validate-tasks.py, read-tasks.py, row-builder.py, json-writer.py)
 - File paths (/tmp/c2c_tasks.json, config.json)
-- Technical jargon ("per the skill rules", "stdout", "stdin", "JSON")
+- Technical jargon ("per the skill rules", "stdout", "stdin", "JSON", "ISO week")
 - Raw script output or code blocks with the output
 - "I'm stopping here because..." or similar meta-commentary
 
@@ -71,40 +62,52 @@ Note: row-builder.py has an internal validation gate. Even if Step 3 is somehow 
 
 ### Error Format (when validation fails):
 
-validate-tasks.py outputs JSON. Parse it and present like this:
+validate-tasks.py outputs JSON. Parse it and present **grouped by week**:
 
 ```
 N cosas por corregir:
 
-1. **Action** en [T277644569](https://www.internalfb.com/T277644569) — dice "Creat", debe ser `Create` o `Review`.
-2. **Effort** en [T277644570](https://www.internalfb.com/T277644570) — está vacío, necesita un número > 0.
-3. **Effort total** — 30hrs registradas vs. 32hrs esperadas (4 días × 8hrs). Faltan 2hrs.
+📅 Semana 27 (Jun 30 - Jul 4):
+1. **Week** en [T276903396](https://www.internalfb.com/T276903396) — falta [Week].
 
+📅 Semana 28 (Jul 7 - Jul 11):
+2. **Effort total** — 71hrs registradas vs. 40hrs esperadas (5 días × 8hrs). Sobran 31hrs.
+   → T277644569 (32hrs) ⚠️ posible [Week] incorrecto
+   → T278660575 (8hrs)
+   → T278660598 (8hrs)
+   → T278660623 (8hrs)
+   → T278660641 (8hrs)
+   → T278660658 (7hrs)
+
+⛔ Todas las semanas deben estar corregidas para generar el reporte.
 Corrige y vuelve a correr /tasks-to-click2sync.
 ```
 
 Rules:
+- Use the `weekLabels` from JSON for the 📅 headers
+- Sort weeks ascending
 - Do NOT show the raw JSON
-- One line per error, numbered list
+- One line per error, numbered list (continuous numbering across weeks)
 - Bold the field name, link the task ID
 - Show numbers with their decimals as-is (do NOT round or truncate)
-- Always end with "Corrige y vuelve a correr /tasks-to-click2sync."
+- **MANDATORY for Effort total errors:** List tasks ONE PER LINE, indented with "→". Format: `→ T123 (8hrs)`. Read from `calendarErrors[].tasks[]`. If a task has `"suspicious": true`, append ` ⚠️ posible [Week] incorrecto` to that line. NEVER omit task lines.
+- Always end with "⛔ Todas las semanas deben estar corregidas para generar el reporte.\nCorrige y vuelve a correr /tasks-to-click2sync."
 
 ### Success Format (when validation passes):
 
-Say ONLY: "✅ Validación OK — escribiendo reporte..." then proceed to Step 4.
+Say ONLY: "✅ Validación OK — escribiendo reporte..." then proceed to Step 3.
 
-After Step 4 completes, say ONLY: "✅ Reporte escrito."
+After Step 3 completes, say ONLY: "✅ Reporte escrito (N semanas)." where N is the number of weeks written.
 
 ### Empty Format:
 
-Say ONLY: "No hay tasks para esta semana."
+Say ONLY: "No hay tasks en las últimas semanas."
 
 ### Warnings (no errors but has warnings):
 
-Proceed to Step 4. Show warnings AFTER the write:
+Proceed to Step 3. Show warnings AFTER the write:
 ```
-Reporte escrito. ⚠️ 1 aviso:
+Reporte escrito (2 semanas). ⚠️ 1 aviso:
 - **Productivity TEP** en [T277644569](https://www.internalfb.com/T277644569) — ratio 1.5, threshold <= 1.0.
 ```
 
@@ -117,4 +120,4 @@ If any script fails with "OAuth" or "401" or "auth" errors, tell the user:
 > 2. Da click en "Generate new token"
 > 3. Copia URL
 > 4. Pégala en tu terminal y da enter
-> 5. Vuelve a correr /click2sync-weekly-report
+> 5. Vuelve a correr /tasks-to-click2sync
