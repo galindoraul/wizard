@@ -1,4 +1,3 @@
-.claude/skills/config.json
 .claude/skills/tasks-creation/SKILL.md
 .claude/skills/tasks-creation/assets/access_request.md
 .claude/skills/tasks-creation/assets/aip_review.md
