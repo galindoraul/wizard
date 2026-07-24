@@ -1,9 +1,9 @@
 {
   "files.exclude": {
-    ".claude/skills/tasks-creation": false,
+    ".claude/skills/tasks-creation": true ,
     ".claude/skills/tasks-to-click2sync": false,
     "install.ps1": true,
-    "install.sh": false,
+    "install.sh": true,
   },
 
   "search.exclude": {

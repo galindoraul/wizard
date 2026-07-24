@@ -262,6 +262,11 @@ def main():
     output = []
     for task in tasks_raw:
         title_parsed = parse_title(task.get("title", ""))
+
+        # Skip tasks without the [STK] title format (not C2C tasks)
+        if not title_parsed["module"] or not title_parsed["team"]:
+            continue
+
         desc_keys = parse_description_keys(task.get("description", ""))
         category = desc_keys.get("Type", "")
         created_week = guess_week_from_creation(task)
