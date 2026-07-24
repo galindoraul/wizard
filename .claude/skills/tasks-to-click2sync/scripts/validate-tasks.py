@@ -159,7 +159,7 @@ def validate_task(task):
     module = task.get("module", "")
     team = task.get("team", "")
 
-    # Structure validation (title)
+    # Structure validation (Title)
     if not module or not team:
         errors.append(
             {
